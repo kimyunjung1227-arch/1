@@ -74,43 +74,6 @@ const parseDateKeyLocal = (key) => {
   return new Date(y, m - 1, d);
 };
 
-// 프로필 화면용 목업 게시물 (실제 업로드가 없을 때 데모용)
-const MOCK_PROFILE_POSTS = [
-  {
-    id: 'mock-profile-1',
-    userId: 'mock-user',
-    imageUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=800&q=80',
-    location: '서울 성수동',
-    detailedLocation: '성수 팝업 스토어 앞',
-    note: '퇴근하고 들렀는데 줄이 이미 이렇게… 오늘 사람 진짜 많아요.',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    likes: 73,
-    coordinates: { lat: 37.5446, lng: 127.0559 },
-  },
-  {
-    id: 'mock-profile-2',
-    userId: 'mock-user',
-    imageUrl: 'https://images.unsplash.com/photo-1500534314211-0a24cd03f2c0?w=800&q=80',
-    location: '여의도 한강공원',
-    detailedLocation: '불꽃축제 뷰 포인트',
-    note: '불꽃 시작 30분 전인데 자리 거의 없어요. 돗자리 꼭 챙기세요.',
-    createdAt: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
-    likes: 128,
-    coordinates: { lat: 37.5271, lng: 126.9326 },
-  },
-  {
-    id: 'mock-profile-3',
-    userId: 'mock-user',
-    imageUrl: 'https://images.unsplash.com/photo-1500534314211-0a24cd03f2c0?w=800&q=80',
-    location: '제주 애월',
-    detailedLocation: '바다 보이는 카페',
-    note: '바다 뷰 좋은데, 창가 자리만 조금 웨이팅 있어요. 오후 4시쯤이 제일 예쁠 듯!',
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    likes: 54,
-    coordinates: { lat: 33.4610, lng: 126.3080 },
-  },
-];
-
 const ProfileScreen = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -292,23 +255,13 @@ const ProfileScreen = () => {
     logger.debug('  내 게시물 (모두):', userPosts.length);
     logger.debug('  사용자 ID:', userId);
 
-    // 실제 내가 올린 게시물이 한 개도 없을 때는 프로필 화면을 비워두지 않고
-    // 목업 데이터로 데모 경험을 제공
-    const finalPosts =
-      userPostsWithCoords.length > 0
-        ? userPostsWithCoords
-        : MOCK_PROFILE_POSTS.map(p => ({
-            ...p,
-            userId: userId || p.userId,
-          }));
+    // 실제 내가 올린 게시물만 사용 (목업 데이터 제거)
+    setMyPosts(userPostsWithCoords);
+    setFilteredPosts(userPostsWithCoords);
 
-    setMyPosts(finalPosts);
-    setFilteredPosts(finalPosts);
-
-    // 사용 가능한 날짜 목록 추출
-    // 실제 내 게시물이 있으면 그 기준으로, 없으면 목업(finalPosts) 기준으로 날짜 구성
+    // 사용 가능한 날짜 목록 추출 (내 게시물이 있을 때만)
     const dates = [...new Set(
-      finalPosts
+      userPostsWithCoords
         .map(post => getPostDateKey(post))
         .filter(Boolean)
     )].sort((a, b) => (parseDateKeyLocal(b)?.getTime() || 0) - (parseDateKeyLocal(a)?.getTime() || 0));

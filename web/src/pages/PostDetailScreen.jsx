@@ -202,7 +202,7 @@ const PostDetailScreen = () => {
         user: q.user?.username || '익명',
         content: q.question,
         time: getTimeAgo(q.createdAt),
-        avatar: q.user?.profileImage || `https://i.pravatar.cc/150?img=${idx + 1}`
+        avatar: q.user?.profileImage || null
       }];
 
       if (q.answer) {
@@ -213,7 +213,7 @@ const PostDetailScreen = () => {
           isAuthor: true,
           content: q.answer,
           time: getTimeAgo(q.createdAt),
-          avatar: q.answeredBy?.profileImage || `https://i.pravatar.cc/150?img=${idx + 10}`
+          avatar: q.answeredBy?.profileImage || null
         });
       }
 
@@ -428,7 +428,7 @@ const PostDetailScreen = () => {
           user: username,
           content: text,
           timestamp: new Date().toISOString(),
-          avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`
+          avatar: user?.profileImage || null
         };
         setComments((prev) => [...prev, newComment]);
       }
@@ -439,7 +439,7 @@ const PostDetailScreen = () => {
         user: username,
         content: text,
         timestamp: new Date().toISOString(),
-        avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`
+        avatar: user?.profileImage || null
       };
       setComments((prev) => [...prev, newComment]);
     }
@@ -759,8 +759,12 @@ const PostDetailScreen = () => {
   const locationText = useMemo(() => post?.location?.name || post?.location || post?.title || '여행지', [post]);
   const detailedLocationText = useMemo(() => post?.detailedLocation || post?.placeName || null, [post]);
   const addressText = useMemo(() => post?.address || null, [post]);
-  const userName = useMemo(() => post?.user?.username || post?.user || '실시간정보왕', [post]);
-  const userBadge = useMemo(() => post?.user?.badges?.[0] || post?.badge || '여행러버', [post]);
+  const userName = useMemo(() => post?.user?.username || post?.user || '익명 여행자', [post]);
+  const userBadge = useMemo(() => post?.user?.badges?.[0] || post?.badge || null, [post]);
+  const authorAvatar = useMemo(
+    () => post?.user?.profileImage || post?.userAvatar || null,
+    [post]
+  );
   // EXIF에서 추출한 촬영 날짜 우선 사용
   const photoDate = useMemo(() => post?.photoDate || post?.exifData?.photoDate || null, [post]);
   // 상세 화면용 촬영 시간 라벨 (예: "2/10 14:30 촬영")
@@ -949,10 +953,16 @@ const PostDetailScreen = () => {
                     }
                   }}
                 >
-                  <div
-                    className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-10 w-10 ring-2 ring-gray-200 dark:ring-gray-700 flex-shrink-0"
-                    style={{ backgroundImage: `url("${post?.userAvatar || 'https://i.pravatar.cc/150?u=' + userName}")` }}
-                  />
+                  {authorAvatar ? (
+                    <div
+                      className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-10 w-10 ring-2 ring-gray-200 dark:ring-gray-700 flex-shrink-0"
+                      style={{ backgroundImage: `url("${authorAvatar}")` }}
+                    />
+                  ) : (
+                    <div className="rounded-full h-10 w-10 ring-2 ring-gray-200 dark:ring-gray-700 flex-shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-semibold text-gray-700 dark:text-gray-100">
+                      {String(userName || '여행자').charAt(0)}
+                    </div>
+                  )}
                   <div className="flex flex-col flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-[#181410] dark:text-white text-sm font-bold leading-tight truncate">
@@ -1294,10 +1304,16 @@ const PostDetailScreen = () => {
                 <div className="flex flex-col gap-3 mt-2">
                   {comments.map((comment) => (
                     <div key={comment.id} className="flex gap-3">
-                      <div
-                        className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-8 w-8 flex-shrink-0"
-                        style={{ backgroundImage: `url("${comment.avatar}")` }}
-                      ></div>
+                      {comment.avatar ? (
+                        <div
+                          className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-8 w-8 flex-shrink-0"
+                          style={{ backgroundImage: `url("${comment.avatar}")` }}
+                        />
+                      ) : (
+                        <div className="rounded-full h-8 w-8 flex-shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] font-semibold text-gray-700 dark:text-gray-100">
+                          {String(comment.user || '유저').charAt(0)}
+                        </div>
+                      )}
                       <div className="flex flex-col flex-1">
                         <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg rounded-tl-none">
                           <p className="text-sm font-bold text-[#181410] dark:text-white">
