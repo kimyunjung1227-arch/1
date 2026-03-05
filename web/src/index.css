@@ -4,6 +4,8 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 앱 컬러 사용: primary는 강조용(활성 탭, CTA, 링크), 배경은 primary-5(5% 톤) 사용 */
+
 /* 로고 전용 폰트 (Poppins) */
 
 .logo-text {
@@ -31,7 +33,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* 좌우 흰 바탕 */
+  /* 앱 배경 통일 (theme background-light) */
   background: #ffffff;
   min-height: 100vh;
   overflow-x: hidden;
@@ -512,4 +514,14 @@ img {
     fadeIn 0.3s ease-out forwards;
   animation-delay: var(--delay, 0ms), var(--delay, 0ms);
   animation-fill-mode: both;
+}
+
+/* 온보딩: 슬라이드 높이 통일 → 2→3 전환 시 덜컥거림 방지 */
+.onboarding-swiper,
+.onboarding-swiper .swiper-wrapper,
+.onboarding-swiper .swiper-slide {
+  height: 100%;
+}
+.onboarding-swiper .swiper-wrapper {
+  transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }

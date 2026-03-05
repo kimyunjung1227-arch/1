@@ -115,9 +115,9 @@ const ChatWriteScreen = () => {
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
                       currentStep > step
-                        ? 'bg-[#00BCD4] text-white'
+                        ? 'bg-[#26C6DA] text-white'
                         : currentStep === step
-                          ? 'bg-[#00BCD4] text-white'
+                          ? 'bg-[#26C6DA] text-white'
                           : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
                     }`}
                   >
@@ -134,7 +134,7 @@ const ChatWriteScreen = () => {
                 {step < 4 && (
                   <div
                     className={`flex-1 h-0.5 max-w-[20px] rounded ${
-                      currentStep > step ? 'bg-[#00BCD4]' : 'bg-gray-200 dark:bg-gray-700'
+                      currentStep > step ? 'bg-[#26C6DA]' : 'bg-gray-200 dark:bg-gray-700'
                     }`}
                   />
                 )}
@@ -159,8 +159,8 @@ const ChatWriteScreen = () => {
                     onClick={() => setRegion(id)}
                     className={`py-3 px-4 rounded-xl border-2 text-sm font-medium transition-colors ${
                       region === id
-                        ? 'border-[#00BCD4] bg-[#00BCD4]/10 text-[#00BCD4]'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-[#00BCD4]/50'
+                        ? 'border-[#26C6DA] bg-[#26C6DA]/10 text-[#26C6DA]'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-[#26C6DA]/50'
                     }`}
                   >
                     {label}
@@ -196,7 +196,7 @@ const ChatWriteScreen = () => {
                     onClick={() => toggleCategory(id)}
                     className={`py-4 px-4 rounded-2xl border-2 text-base font-semibold transition-colors text-center whitespace-pre-line ${
                       categories.includes(id)
-                        ? 'border-[#00BCD4] bg-[#00BCD4]/10 text-[#00BCD4]'
+                        ? 'border-[#26C6DA] bg-[#26C6DA]/10 text-[#26C6DA]'
                         : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
@@ -212,7 +212,7 @@ const ChatWriteScreen = () => {
                     onClick={() => toggleCategory(id)}
                     className={`w-full max-w-[320px] py-4 px-4 rounded-2xl border-2 text-base font-semibold transition-colors whitespace-pre-line ${
                       categories.includes(id)
-                        ? 'border-[#00BCD4] bg-[#00BCD4]/10 text-[#00BCD4]'
+                        ? 'border-[#26C6DA] bg-[#26C6DA]/10 text-[#26C6DA]'
                         : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
@@ -233,7 +233,7 @@ const ChatWriteScreen = () => {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="예: 주말 남산 야경 산책 같이 가실 분"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-[15px] placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#00BCD4]/50 focus:border-[#00BCD4]"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-[15px] placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#26C6DA]/50 focus:border-[#26C6DA]"
                 />
               </div>
               <div>
@@ -243,7 +243,7 @@ const ChatWriteScreen = () => {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="일정, 원하는 동행 조건 등을 자유롭게 적어주세요."
                   rows={5}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-[15px] placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#00BCD4]/50 focus:border-[#00BCD4] resize-none"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-[15px] placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#26C6DA]/50 focus:border-[#26C6DA] resize-none"
                 />
               </div>
             </div>
@@ -292,7 +292,7 @@ const ChatWriteScreen = () => {
                   (currentStep === 2 && !canNextStep2) ||
                   (currentStep === 3 && !canNextStep3)
                 }
-                className="w-full py-3.5 rounded-xl bg-[#00BCD4] text-white font-semibold text-[15px] hover:bg-[#00a8b8] active:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3.5 rounded-xl bg-[#26C6DA] text-white font-semibold text-[15px] hover:bg-[#00B8CC] active:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 다음
               </button>
@@ -301,7 +301,7 @@ const ChatWriteScreen = () => {
                 type="button"
                 onClick={handleUpload}
                 disabled={!canUpload}
-                className="w-full py-3.5 rounded-xl bg-[#00BCD4] text-white font-semibold text-[15px] hover:bg-[#00a8b8] active:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3.5 rounded-xl bg-[#26C6DA] text-white font-semibold text-[15px] hover:bg-[#00B8CC] active:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <span className="material-symbols-outlined text-xl">upload</span>
                 업로드

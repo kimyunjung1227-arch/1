@@ -99,6 +99,16 @@ const postSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  // 정보가 정확해요 (다른 사용자가 눌렀을 때 작성자 신뢰지수에 반영)
+  accuracyCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  accuracyMarkedBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   comments: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -187,6 +197,36 @@ postSchema.methods.removeLike = async function (userId) {
   if (index > -1) {
     this.likes -= 1;
     this.likedBy.splice(index, 1);
+    await this.save();
+    return true;
+  }
+  return false;
+};
+
+// 정보가 정확해요 추가 (다른 사용자가 누르면 작성자 신뢰지수 상승)
+postSchema.methods.addAccuracyMark = async function (userId) {
+  const id = userId.toString ? userId.toString() : userId;
+  const existing = (this.accuracyMarkedBy || []).some(
+    (oid) => (oid && oid.toString()) === id
+  );
+  if (!existing) {
+    this.accuracyCount = (this.accuracyCount || 0) + 1;
+    this.accuracyMarkedBy = this.accuracyMarkedBy || [];
+    this.accuracyMarkedBy.push(userId);
+    await this.save();
+    return true;
+  }
+  return false;
+};
+
+// 정보가 정확해요 취소
+postSchema.methods.removeAccuracyMark = async function (userId) {
+  const id = userId.toString ? userId.toString() : userId;
+  const arr = this.accuracyMarkedBy || [];
+  const idx = arr.findIndex((oid) => oid && oid.toString() === id);
+  if (idx > -1) {
+    this.accuracyCount = Math.max(0, (this.accuracyCount || 0) - 1);
+    this.accuracyMarkedBy.splice(idx, 1);
     await this.save();
     return true;
   }

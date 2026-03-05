@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BottomNavigation from '../components/BottomNavigation';
 import { getRegionDefaultImage } from '../utils/regionDefaultImages';
-import { getTimeAgo } from '../utils/timeUtils';
+import { getTimeAgo, filterActivePosts48 } from '../utils/timeUtils';
 import { logger } from '../utils/logger';
-import { filterActivePosts48 } from '../utils/timeUtils';
 import { getCombinedPosts } from '../utils/mockData';
 import { getDisplayImageUrl } from '../api/upload';
 import { getWeatherByRegion } from '../api/weather';
 import { useHorizontalDragScroll } from '../hooks/useHorizontalDragScroll';
 import BackButton from '../components/BackButton';
+import InterestPlacesContent from '../components/InterestPlacesContent';
 
 // 해시태그 파싱: #동백꽃 #바다 #힐링 → ['동백꽃','바다','힐링']
 const parseHashtags = (q) => {
@@ -64,6 +64,7 @@ const SearchScreen = () => {
   const [searchEvents, setSearchEvents] = useState([]);
   const [photoFocusMode, setPhotoFocusMode] = useState(false);
   const [weatherData, setWeatherData] = useState({});
+  const [showInterestPlacesModal, setShowInterestPlacesModal] = useState(false);
 
   const recommendedScrollRef = useRef(null);
   const screenBodyRef = useRef(null);
@@ -216,7 +217,8 @@ const SearchScreen = () => {
       });
     }
     cards.sort((a, b) => (order[a.category] ?? 10) - (order[b.category] ?? 10) || b.count - a.count);
-    return cards.slice(0, 12);
+    // 추천 지역 카드는 화면 가독성을 위해 8개까지만 노출
+    return cards.slice(0, 8);
   }, [allPosts, recommendedRegions]);
 
   // 지역별 날씨 정보 가져오기
@@ -605,15 +607,15 @@ const SearchScreen = () => {
     <div className="screen-layout text-text-light dark:text-text-dark bg-background-light dark:bg-background-dark h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col">
       <div className="screen-content flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* 헤더 - 최소화 (고정) */}
-        <div className="flex-shrink-0 flex items-center px-4 pt-4 pb-2 bg-white dark:bg-gray-900">
+        <div className="flex-shrink-0 flex items-center px-4 pt-2 pb-1 bg-white dark:bg-gray-900">
           <BackButton />
         </div>
 
         {/* 검색창 - 스크롤해도 계속 보이게 (고정) */}
-        <div className="flex-shrink-0 px-4 pb-4 bg-white dark:bg-gray-900 relative" ref={searchContainerRef}>
+        <div className="flex-shrink-0 px-4 pb-2 bg-white dark:bg-gray-900 relative" ref={searchContainerRef}>
           <form onSubmit={handleSearch}>
-            <div className="flex items-center w-full h-12 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 gap-3">
-              <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-[22px]">search</span>
+            <div className="flex items-center w-full h-10 rounded-xl border border-gray-200 dark:border-gray-600 bg-primary-5 dark:bg-gray-800 px-3 gap-2">
+              <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-[20px]">search</span>
               <input
                 className="flex-1 min-w-0 bg-transparent text-black dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 text-base focus:outline-none"
                 placeholder="어디로 떠나볼까요?"
@@ -685,11 +687,29 @@ const SearchScreen = () => {
           className="screen-body flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
           style={{ minHeight: 0, WebkitOverflowScrolling: 'touch' }}
         >
+          {/* 관심 지역 설정 - 스크롤과 함께 이동 */}
+          <div className="px-4 pt-1 pb-2">
+            <button
+              type="button"
+              onClick={() => setShowInterestPlacesModal(true)}
+              className="w-full flex items-center justify-between py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[20px]">location_on</span>
+                <div>
+                  <span className="text-[#1c140d] dark:text-background-light font-semibold text-sm block">관심 지역 설정</span>
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">알림 받을 지역 추가·관리</span>
+                </div>
+              </div>
+              <span className="material-symbols-outlined text-gray-400 dark:text-gray-500 text-[20px]">chevron_right</span>
+            </button>
+          </div>
+
           {/* 최근 검색한 지역 - 해시태그 위 (공간 최소화) */}
           {recentRegionSearches.length > 0 && (
-            <div className={`px-4 pt-3 pb-1 ${showSuggestions ? 'opacity-30' : ''}`}>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-[#1c140d] dark:text-background-light text-base font-bold leading-tight tracking-[-0.015em] pb-1">
+            <div className={`px-4 pt-1 pb-1 ${showSuggestions ? 'opacity-30' : ''}`}>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-[#1c140d] dark:text-background-light text-sm font-bold leading-tight tracking-[-0.015em]">
                   최근 검색한 지역
                 </h2>
                 <button
@@ -702,7 +722,7 @@ const SearchScreen = () => {
               <div
                 className={`flex overflow-x-scroll overflow-y-hidden [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory scroll-smooth ${showSuggestions ? 'opacity-30 pointer-events-none' : ''}`}
                 onMouseDown={handleDragStart}
-                style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch', maxHeight: 64 }}
+                style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch', maxHeight: 52 }}
               >
                 <div className="flex items-center px-2 gap-2 pb-1">
                   {recentRegionSearches.map((search, index) => (
@@ -729,74 +749,19 @@ const SearchScreen = () => {
             </div>
           )}
 
-          {/* 추천여행지 - 가로 스크롤 카드 (이미지 스타일) */}
-          <div className={`px-4 pt-5 pb-4 ${showSuggestions ? 'opacity-30 pointer-events-none' : ''}`}>
-            <h2 className="text-black dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] mb-4">
-              추천여행지
+          {/* 추천 · 인기 지역 (통합) */}
+          <div className={`px-4 pt-2 pb-2 ${showSuggestions ? 'opacity-30 pointer-events-none' : ''}`}>
+            <h2 className="text-black dark:text-white text-sm font-bold leading-tight tracking-[-0.015em] mb-2">
+              추천 · 인기 지역
             </h2>
-            <div
-              onMouseDown={handleDragStart}
-              className="flex overflow-x-auto overflow-y-hidden pb-4 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory"
-              style={{ WebkitOverflowScrolling: 'touch', gap: '10px' }}
-            >
-              {diverseRegionCards.length === 0 ? (
-                <div className="w-full py-10 px-4 text-center">
-                  <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-4xl mb-2">photo_camera</span>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">사용자가 올린 여행 정보가 아직 없어요</p>
-                  <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">첫 사진을 올리면 여기 추천에 반영돼요</p>
-                </div>
-              ) : (
-                diverseRegionCards.map((card, index) => {
-                  const displayImage = getDisplayImageUrl(card.image || getRegionDefaultImage(card.name));
-                  const weather = weatherData[card.name];
-                  return (
-                    <div
-                      key={`${card.name}-${card.category}-${index}`}
-                      onClick={() => handleRegionClickWithDragCheck(card.name)}
-                      className="flex-shrink-0 rounded-2xl bg-white dark:bg-gray-800 overflow-hidden cursor-pointer hover:shadow-lg transition-all snap-start mx-1"
-                      style={{ width: '200px', minWidth: '200px', maxWidth: '200px', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', scrollSnapStop: 'always' }}
-                    >
-                      <div className="relative w-full overflow-hidden" style={{ aspectRatio: '1', height: 'auto' }}>
-                        <img src={displayImage} alt={card.name} className="w-full h-full object-cover" style={{ display: 'block' }} />
-                        {weather && (
-                          <span className="absolute top-3 right-3 text-white text-xs font-semibold bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-lg flex items-center gap-1">
-                            <span>{weather.icon}</span>
-                            <span>{weather.temperature}</span>
-                          </span>
-                        )}
-                      </div>
-                      <div className="p-3" style={{ background: '#f8fafc', borderTop: '3px solid #475569', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <p className="text-black dark:text-white font-bold text-sm truncate">{card.name}</p>
-                          {card.time && (
-                            <span className="text-gray-400 dark:text-gray-500 text-[10px] whitespace-nowrap">🕐 {card.time}</span>
-                          )}
-                        </div>
-                        <p className="text-gray-500 dark:text-gray-400 text-[11px] font-medium truncate">{getRegionTagline(card.name)}</p>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              {/* 끝까지 시원하게 슬라이드 가능하도록 여백 추가 */}
-              <div className="flex-shrink-0" style={{ width: '200px' }}></div>
-            </div>
-          </div>
-
-          {/* 지금 검색이 가장 많은 지역 - 해시태그 위 */}
-          {mostSearchedRegions.length > 0 && (
-            <div className={`px-4 pt-2 pb-2 ${showSuggestions ? 'opacity-30 pointer-events-none' : ''}`}>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-black dark:text-white text-base font-bold">
-                  지금 검색이 가장 많은 지역
-                </h2>
-              </div>
+            {/* 인기 검색 지역 칩 */}
+            {mostSearchedRegions.length > 0 && (
               <div
                 onMouseDown={handleDragStart}
-                className="flex overflow-x-auto overflow-y-hidden gap-2 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="flex overflow-x-auto overflow-y-hidden gap-1.5 mb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 style={{ WebkitOverflowScrolling: 'touch' }}
               >
-                {mostSearchedRegions.map(({ name, count }, index) => (
+                {mostSearchedRegions.map(({ name }, index) => (
                   <button
                     key={name}
                     type="button"
@@ -806,23 +771,69 @@ const SearchScreen = () => {
                         navigate(`/region/${name}`, { state: { region: { name } } });
                       }
                     }}
-                    className="flex-shrink-0 px-4 py-2.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 hover:bg-primary/20 dark:hover:bg-primary/30 transition-colors flex items-center gap-2"
+                    className="flex-shrink-0 px-3 py-2 rounded-full text-xs font-medium bg-primary-5 dark:bg-gray-700 text-gray-800 dark:text-gray-100 hover:bg-primary-10 dark:hover:bg-primary/30 transition-colors flex items-center gap-1.5"
                     style={{ scrollSnapStop: 'always' }}
                   >
-                    <span className="material-symbols-outlined text-primary text-[18px]">trending_up</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-300">{index + 1}.</span>
+                    <span className="material-symbols-outlined text-primary text-[16px]">trending_up</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-300">{index + 1}.</span>
                     <span>{name}</span>
                   </button>
                 ))}
               </div>
+            )}
+            {/* 추천 여행지 카드 */}
+            <div
+              onMouseDown={handleDragStart}
+              className="flex overflow-x-auto overflow-y-hidden pb-2 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory"
+              style={{ WebkitOverflowScrolling: 'touch', gap: '8px' }}
+            >
+              {diverseRegionCards.length === 0 && mostSearchedRegions.length === 0 ? (
+                <div className="w-full py-6 px-4 text-center">
+                  <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-3xl mb-1">photo_camera</span>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">사용자가 올린 여행 정보가 아직 없어요</p>
+                </div>
+              ) : diverseRegionCards.length === 0 ? null : (
+                diverseRegionCards.map((card, index) => {
+                  const displayImage = getDisplayImageUrl(card.image || getRegionDefaultImage(card.name));
+                  const weather = weatherData[card.name];
+                  return (
+                    <div
+                      key={`${card.name}-${card.category}-${index}`}
+                      onClick={() => handleRegionClickWithDragCheck(card.name)}
+                      className="flex-shrink-0 overflow-visible cursor-pointer transition-all snap-start"
+                      style={{ width: '160px', minWidth: '160px', maxWidth: '160px', scrollSnapStop: 'always' }}
+                    >
+                      <div className="relative w-full overflow-hidden" style={{ aspectRatio: '9/10', height: 'auto', borderRadius: '12px', marginBottom: '2px' }}>
+                        <img src={displayImage} alt={card.name} className="w-full h-full object-cover" style={{ display: 'block', borderRadius: '12px' }} />
+                        {weather && (
+                          <span className="absolute top-3 right-3 text-white text-xs font-semibold bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-lg flex items-center gap-1">
+                            <span>{weather.icon}</span>
+                            <span>{weather.temperature}</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="px-2 py-1">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <p className="text-black dark:text-white font-bold text-xs truncate">{card.name}</p>
+                          {card.time && (
+                            <span className="text-gray-400 dark:text-gray-500 text-[10px] whitespace-nowrap">🕐 {card.time}</span>
+                          )}
+                        </div>
+                        <p className="text-gray-500 dark:text-gray-400 text-[10px] font-medium truncate">{getRegionTagline(card.name)}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div className="flex-shrink-0" style={{ width: '160px' }}></div>
             </div>
-          )}
+          </div>
 
-          {/* 해시태그 - 추천 여행지 밑, 클릭 시 하단에 사진 표시 */}
+          {/* 해시태그 - 클릭 시 하단에 사진 표시 */}
           {hashtagChips.length > 0 && (
-            <div className={`px-4 pt-2 pb-3 ${showSuggestions ? 'opacity-30 pointer-events-none' : ''}`}>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-black dark:text-white text-base font-bold">해시태그</h2>
+            <div className={`px-4 pt-1 pb-2 ${showSuggestions ? 'opacity-30 pointer-events-none' : ''}`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <h2 className="text-black dark:text-white text-sm font-bold">해시태그</h2>
                 <button
                   type="button"
                   onClick={() => navigate('/hashtags')}
@@ -833,7 +844,7 @@ const SearchScreen = () => {
               </div>
               <div
                 onMouseDown={handleDragStart}
-                className="flex overflow-x-auto overflow-y-hidden gap-2 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="flex overflow-x-auto overflow-y-hidden gap-1.5 pb-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 style={{ WebkitOverflowScrolling: 'touch' }}
               >
                 {hashtagChips.map(({ key, display }) => {
@@ -852,7 +863,7 @@ const SearchScreen = () => {
                           }
                         }
                       }}
-                      className={`flex-shrink-0 px-4 py-2.5 rounded-full text-sm font-medium transition-colors snap-start ${isSelected ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-primary/20 dark:hover:bg-primary/30'
+                      className={`flex-shrink-0 px-3 py-2 rounded-full text-xs font-medium transition-colors snap-start ${isSelected ? 'bg-primary text-white' : 'bg-primary-5 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-primary-10 dark:hover:bg-primary/30'
                         }`}
                       style={{ scrollSnapStop: 'always' }}
                     >
@@ -866,9 +877,9 @@ const SearchScreen = () => {
 
           {/* 선택된 해시태그 사진 그리드 */}
           {selectedHashtag && (
-            <div className={`px-4 pt-0 pb-4 ${showSuggestions ? 'opacity-30 pointer-events-none' : ''}`}>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-black dark:text-white text-sm font-bold">#{selectedHashtag} ({hashtagPostResults.length}장)</h3>
+            <div className={`px-4 pt-0 pb-2 ${showSuggestions ? 'opacity-30 pointer-events-none' : ''}`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <h3 className="text-black dark:text-white text-xs font-bold">#{selectedHashtag} ({hashtagPostResults.length}장)</h3>
                 <button
                   type="button"
                   onClick={() => setSelectedHashtag(null)}
@@ -911,6 +922,39 @@ const SearchScreen = () => {
 
         </div>
       </div>
+
+      {/* 관심 지역 설정 팝업 - 화면에 맞게 */}
+      {showInterestPlacesModal && (
+        <div
+          className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          onClick={() => setShowInterestPlacesModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="관심 지역 설정"
+        >
+          <div className="absolute inset-0 bg-black/40" aria-hidden="true" />
+          <div
+            className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col min-h-0 h-[90dvh] max-h-[90dvh] sm:h-auto sm:max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">관심 지역 설정</h2>
+              <button
+                type="button"
+                onClick={() => setShowInterestPlacesModal(false)}
+                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
+                aria-label="닫기"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3 pb-6">
+              <InterestPlacesContent compact />
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNavigation />
     </div >

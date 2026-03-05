@@ -40,6 +40,39 @@ const getPlaceKey = (post) =>
 const getPlaceImage = (post) =>
   getDisplayImageUrl(post?.images?.[0] || post?.thumbnail || post?.image || post?.imageUrl || '');
 
+// 장소 타입 추론 (카페/맛집/포토존/액티비티/기타)
+const inferPlaceKind = (post) => {
+  if (!post) return '기타';
+  const parts = [
+    post.placeName,
+    post.detailedLocation,
+    post.location,
+    Array.isArray(post.tags) ? post.tags.join(' ') : '',
+    post.categoryName,
+    post.category
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (parts.includes('카페')) return '카페';
+  if (parts.includes('맛집') || parts.includes('restaurant') || parts.includes('식당') || parts.includes('food')) return '맛집';
+  if (
+    parts.includes('포토존') ||
+    parts.includes('전망대') ||
+    parts.includes('뷰포인트') ||
+    parts.includes('전망') ||
+    (post.category === 'scenic') ||
+    (typeof post.categoryName === 'string' && post.categoryName.includes('야경'))
+  ) {
+    return '포토존';
+  }
+  if (parts.includes('액티비티') || parts.includes('활동') || parts.includes('체험') || parts.includes('activity')) {
+    return '액티비티';
+  }
+  return '기타';
+};
+
 const decayWeight = (ageMinutes, decayMinutes = 20) => {
   if (ageMinutes <= 0) return 1;
   return Math.exp(-ageMinutes / decayMinutes);
@@ -157,7 +190,14 @@ export const computeHotPlaces = (posts, searchEvents, options = {}) => {
     maxA = Math.max(maxA, A);
     maxI = Math.max(maxI, I);
 
-    const samplePost = items[0]?.post;
+    const samplePost =
+      items.find(({ post }) => (post?.content || post?.note))?.post ||
+      items[0]?.post;
+
+    const usersSet = new Set(
+      items.map(({ post }) => post.userId || post.user?.id || post.user).filter(Boolean)
+    );
+
     results.push({
       key,
       center,
@@ -165,10 +205,14 @@ export const computeHotPlaces = (posts, searchEvents, options = {}) => {
       raw: { D, A, I },
       counts: {
         posts: items.length,
-        users: new Set(items.map(({ post }) => post.userId || post.user?.id || post.user)).size
+        users: usersSet.size
       },
       rising: last15 >= 3,
-      verified: items.some(({ post }) => isRealtimeVerified(post))
+      verified: items.some(({ post }) => isRealtimeVerified(post)),
+      // UI용 추가 정보
+      samplePost,
+      kind: inferPlaceKind(samplePost),
+      viewerCount: usersSet.size
     });
   });
 

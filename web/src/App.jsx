@@ -1,56 +1,55 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, Suspense, lazy } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import { initStatusBar } from './utils/statusBar'
 import SosAlertBanner from './components/SosAlertBanner'
 
-// Pages
-import WelcomeScreen from './pages/WelcomeScreen'
-import StartScreen from './pages/StartScreen'
-import OnboardingScreen from './pages/OnboardingScreen'
-import AuthCallbackScreen from './pages/AuthCallbackScreen'
-import MainScreen from './pages/MainScreen'
-import MagazineDetailScreen from './pages/MagazineDetailScreen'
-import SearchScreen from './pages/SearchScreen'
-import HashtagScreen from './pages/HashtagScreen'
-import DetailScreen from './pages/DetailScreen'
-import PostDetailScreen from './pages/PostDetailScreen'
-import RegionDetailScreen from './pages/RegionDetailScreen'
-import UploadScreen from './pages/UploadScreen'
-import MapScreen from './pages/MapScreen'
-import MapPhotoGridScreen from './pages/MapPhotoGridScreen'
-import ProfileScreen from './pages/ProfileScreen'
-import UserProfileScreen from './pages/UserProfileScreen'
-import EditProfileScreen from './pages/EditProfileScreen'
-import PersonalInfoEditScreen from './pages/PersonalInfoEditScreen'
-import PasswordChangeScreen from './pages/PasswordChangeScreen'
-import AccountConnectionScreen from './pages/AccountConnectionScreen'
-import AccountDeleteScreen from './pages/AccountDeleteScreen'
-import AccountDeleteConfirmScreen from './pages/AccountDeleteConfirmScreen'
-import BadgeListScreen from './pages/BadgeListScreen'
-import BadgeAchievementScreen from './pages/BadgeAchievementScreen'
-import MyCouponsScreen from './pages/MyCouponsScreen'
-import SettingsScreen from './pages/SettingsScreen'
-import FeedUpdateFrequencyScreen from './pages/FeedUpdateFrequencyScreen'
-import NoticesScreen from './pages/NoticesScreen'
-import FAQScreen from './pages/FAQScreen'
-import InquiryScreen from './pages/InquiryScreen'
-import PrivacyPolicyScreen from './pages/PrivacyPolicyScreen'
-import TermsAndPoliciesScreen from './pages/TermsAndPoliciesScreen'
-import LocationTermsScreen from './pages/LocationTermsScreen'
-import YouthPolicyScreen from './pages/YouthPolicyScreen'
-import MarketingConsentScreen from './pages/MarketingConsentScreen'
-import OpenSourceLicensesScreen from './pages/OpenSourceLicensesScreen'
-import BusinessInfoScreen from './pages/BusinessInfoScreen'
-import TermsOfServiceScreen from './pages/TermsOfServiceScreen'
-import NotificationsScreen from './pages/NotificationsScreen'
-import InterestPlacesScreen from './pages/InterestPlacesScreen'
-import RealtimeFeedScreen from './pages/RealtimeFeedScreen'
-import CrowdedPlaceScreen from './pages/CrowdedPlaceScreen'
-import RecommendedPlaceScreen from './pages/RecommendedPlaceScreen'
-import ChatScreen from './pages/ChatScreen'
-import ChatWriteScreen from './pages/ChatWriteScreen'
+// Pages (코드 스플리팅을 위해 lazy 로드)
+const WelcomeScreen = lazy(() => import('./pages/WelcomeScreen'))
+const StartScreen = lazy(() => import('./pages/StartScreen'))
+const OnboardingScreen = lazy(() => import('./pages/OnboardingScreen'))
+const AuthCallbackScreen = lazy(() => import('./pages/AuthCallbackScreen'))
+const MainScreen = lazy(() => import('./pages/MainScreen'))
+const MagazineDetailScreen = lazy(() => import('./pages/MagazineDetailScreen'))
+const SearchScreen = lazy(() => import('./pages/SearchScreen'))
+const HashtagScreen = lazy(() => import('./pages/HashtagScreen'))
+const DetailScreen = lazy(() => import('./pages/DetailScreen'))
+const PostDetailScreen = lazy(() => import('./pages/PostDetailScreen'))
+const RegionDetailScreen = lazy(() => import('./pages/RegionDetailScreen'))
+const UploadScreen = lazy(() => import('./pages/UploadScreen'))
+const MapScreen = lazy(() => import('./pages/MapScreen'))
+const MapPhotoGridScreen = lazy(() => import('./pages/MapPhotoGridScreen'))
+const ProfileScreen = lazy(() => import('./pages/ProfileScreen'))
+const UserProfileScreen = lazy(() => import('./pages/UserProfileScreen'))
+const EditProfileScreen = lazy(() => import('./pages/EditProfileScreen'))
+const PersonalInfoEditScreen = lazy(() => import('./pages/PersonalInfoEditScreen'))
+const PasswordChangeScreen = lazy(() => import('./pages/PasswordChangeScreen'))
+const AccountConnectionScreen = lazy(() => import('./pages/AccountConnectionScreen'))
+const AccountDeleteScreen = lazy(() => import('./pages/AccountDeleteScreen'))
+const AccountDeleteConfirmScreen = lazy(() => import('./pages/AccountDeleteConfirmScreen'))
+const BadgeListScreen = lazy(() => import('./pages/BadgeListScreen'))
+const BadgeAchievementScreen = lazy(() => import('./pages/BadgeAchievementScreen'))
+const MyCouponsScreen = lazy(() => import('./pages/MyCouponsScreen'))
+const SettingsScreen = lazy(() => import('./pages/SettingsScreen'))
+const FeedUpdateFrequencyScreen = lazy(() => import('./pages/FeedUpdateFrequencyScreen'))
+const NoticesScreen = lazy(() => import('./pages/NoticesScreen'))
+const FAQScreen = lazy(() => import('./pages/FAQScreen'))
+const InquiryScreen = lazy(() => import('./pages/InquiryScreen'))
+const PrivacyPolicyScreen = lazy(() => import('./pages/PrivacyPolicyScreen'))
+const TermsAndPoliciesScreen = lazy(() => import('./pages/TermsAndPoliciesScreen'))
+const LocationTermsScreen = lazy(() => import('./pages/LocationTermsScreen'))
+const YouthPolicyScreen = lazy(() => import('./pages/YouthPolicyScreen'))
+const MarketingConsentScreen = lazy(() => import('./pages/MarketingConsentScreen'))
+const OpenSourceLicensesScreen = lazy(() => import('./pages/OpenSourceLicensesScreen'))
+const BusinessInfoScreen = lazy(() => import('./pages/BusinessInfoScreen'))
+const TermsOfServiceScreen = lazy(() => import('./pages/TermsOfServiceScreen'))
+const NotificationsScreen = lazy(() => import('./pages/NotificationsScreen'))
+const InterestPlacesScreen = lazy(() => import('./pages/InterestPlacesScreen'))
+const RealtimeFeedScreen = lazy(() => import('./pages/RealtimeFeedScreen'))
+const CrowdedPlaceScreen = lazy(() => import('./pages/CrowdedPlaceScreen'))
+const ChatScreen = lazy(() => import('./pages/ChatScreen'))
+const ChatWriteScreen = lazy(() => import('./pages/ChatWriteScreen'))
 
 function App() {
   // StatusBar 초기화 (앱 시작 시 한 번만)
@@ -67,58 +66,70 @@ function App() {
         <div className="app-container">
           <div className="page-wrapper">
             <SosAlertBanner />
-            <Routes>
-              {/* 1. 스플래시 → 2. 온보딩 → 3. 로그인(StartScreen) */}
-              <Route path="/" element={<WelcomeScreen />} />
-              <Route path="/onboarding" element={<OnboardingScreen />} />
-              <Route path="/start" element={<StartScreen />} />
-              <Route path="/auth/callback" element={<AuthCallbackScreen />} />
-              {/* 로그인 없이도 접근 가능한 페이지 */}
-              <Route path="/main" element={<MainScreen />} />
-              <Route path="/magazine/:id" element={<MagazineDetailScreen />} />
-              <Route path="/realtime-feed" element={<RealtimeFeedScreen />} />
-              <Route path="/crowded-place" element={<CrowdedPlaceScreen />} />
-              <Route path="/recommended-place" element={<RecommendedPlaceScreen />} />
-              <Route path="/chat" element={<ChatScreen />} />
-              <Route path="/chat/write" element={<ChatWriteScreen />} />
-              <Route path="/search" element={<SearchScreen />} />
-              <Route path="/hashtags" element={<HashtagScreen />} />
-              <Route path="/detail" element={<DetailScreen />} />
-              <Route path="/post/:id" element={<PostDetailScreen />} />
-              <Route path="/region/:regionName" element={<RegionDetailScreen />} />
-              <Route path="/upload" element={<UploadScreen />} />
-              <Route path="/map" element={<MapScreen />} />
-              <Route path="/map/photos" element={<MapPhotoGridScreen />} />
-              <Route path="/profile" element={<ProfileScreen />} />
-              <Route path="/user/:userId" element={<UserProfileScreen />} />
-              <Route path="/badges" element={<BadgeListScreen />} />
-              <Route path="/badge-achievement/:badgeId" element={<BadgeAchievementScreen />} />
-              <Route path="/badge/achievement" element={<BadgeAchievementScreen />} />
-              <Route path="/coupons" element={<MyCouponsScreen />} />
-              <Route path="/notifications" element={<NotificationsScreen />} />
-              <Route path="/interest-places" element={<InterestPlacesScreen />} />
-              <Route path="/notices" element={<NoticesScreen />} />
-              <Route path="/faq" element={<FAQScreen />} />
-              <Route path="/inquiry" element={<InquiryScreen />} />
-              <Route path="/privacy-policy" element={<PrivacyPolicyScreen />} />
-              <Route path="/location-terms" element={<LocationTermsScreen />} />
-              <Route path="/youth-policy" element={<YouthPolicyScreen />} />
-              <Route path="/marketing-consent" element={<MarketingConsentScreen />} />
-              <Route path="/opensource-licenses" element={<OpenSourceLicensesScreen />} />
-              <Route path="/business-info" element={<BusinessInfoScreen />} />
-              <Route path="/terms-and-policies" element={<TermsAndPoliciesScreen />} />
-              <Route path="/terms-of-service" element={<TermsOfServiceScreen />} />
-              {/* 로그인 필수 페이지 */}
-              <Route path="/profile/edit" element={<ProtectedRoute><EditProfileScreen /></ProtectedRoute>} />
-              <Route path="/personal-info-edit" element={<ProtectedRoute><PersonalInfoEditScreen /></ProtectedRoute>} />
-              <Route path="/password-change" element={<ProtectedRoute><PasswordChangeScreen /></ProtectedRoute>} />
-              <Route path="/account-connection" element={<ProtectedRoute><AccountConnectionScreen /></ProtectedRoute>} />
-              <Route path="/account-delete" element={<ProtectedRoute><AccountDeleteScreen /></ProtectedRoute>} />
-              <Route path="/account-delete/confirm" element={<ProtectedRoute><AccountDeleteConfirmScreen /></ProtectedRoute>} />
-              <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
-              <Route path="/feed-update-frequency" element={<ProtectedRoute><FeedUpdateFrequencyScreen /></ProtectedRoute>} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Suspense
+              fallback={
+                <div className="screen-layout bg-background-light dark:bg-background-dark flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400" />
+                    <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                      화면을 불러오는 중입니다...
+                    </span>
+                  </div>
+                </div>
+              }
+            >
+              <Routes>
+                {/* 1. 스플래시 → 2. 온보딩 → 3. 로그인(StartScreen) */}
+                <Route path="/" element={<WelcomeScreen />} />
+                <Route path="/onboarding" element={<OnboardingScreen />} />
+                <Route path="/start" element={<StartScreen />} />
+                <Route path="/auth/callback" element={<AuthCallbackScreen />} />
+                {/* 로그인 없이도 접근 가능한 페이지 */}
+                <Route path="/main" element={<MainScreen />} />
+                <Route path="/magazine/:id" element={<MagazineDetailScreen />} />
+                <Route path="/realtime-feed" element={<RealtimeFeedScreen />} />
+                <Route path="/crowded-place" element={<CrowdedPlaceScreen />} />
+                <Route path="/chat" element={<ChatScreen />} />
+                <Route path="/chat/write" element={<ChatWriteScreen />} />
+                <Route path="/search" element={<SearchScreen />} />
+                <Route path="/hashtags" element={<HashtagScreen />} />
+                <Route path="/detail" element={<DetailScreen />} />
+                <Route path="/post/:id" element={<PostDetailScreen />} />
+                <Route path="/region/:regionName" element={<RegionDetailScreen />} />
+                <Route path="/upload" element={<UploadScreen />} />
+                <Route path="/map" element={<MapScreen />} />
+                <Route path="/map/photos" element={<MapPhotoGridScreen />} />
+                <Route path="/profile" element={<ProfileScreen />} />
+                <Route path="/user/:userId" element={<UserProfileScreen />} />
+                <Route path="/badges" element={<BadgeListScreen />} />
+                <Route path="/badge-achievement/:badgeId" element={<BadgeAchievementScreen />} />
+                <Route path="/badge/achievement" element={<BadgeAchievementScreen />} />
+                <Route path="/coupons" element={<MyCouponsScreen />} />
+                <Route path="/notifications" element={<NotificationsScreen />} />
+                <Route path="/interest-places" element={<InterestPlacesScreen />} />
+                <Route path="/notices" element={<NoticesScreen />} />
+                <Route path="/faq" element={<FAQScreen />} />
+                <Route path="/inquiry" element={<InquiryScreen />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicyScreen />} />
+                <Route path="/location-terms" element={<LocationTermsScreen />} />
+                <Route path="/youth-policy" element={<YouthPolicyScreen />} />
+                <Route path="/marketing-consent" element={<MarketingConsentScreen />} />
+                <Route path="/opensource-licenses" element={<OpenSourceLicensesScreen />} />
+                <Route path="/business-info" element={<BusinessInfoScreen />} />
+                <Route path="/terms-and-policies" element={<TermsAndPoliciesScreen />} />
+                <Route path="/terms-of-service" element={<TermsOfServiceScreen />} />
+                {/* 로그인 필수 페이지 */}
+                <Route path="/profile/edit" element={<ProtectedRoute><EditProfileScreen /></ProtectedRoute>} />
+                <Route path="/personal-info-edit" element={<ProtectedRoute><PersonalInfoEditScreen /></ProtectedRoute>} />
+                <Route path="/password-change" element={<ProtectedRoute><PasswordChangeScreen /></ProtectedRoute>} />
+                <Route path="/account-connection" element={<ProtectedRoute><AccountConnectionScreen /></ProtectedRoute>} />
+                <Route path="/account-delete" element={<ProtectedRoute><AccountDeleteScreen /></ProtectedRoute>} />
+                <Route path="/account-delete/confirm" element={<ProtectedRoute><AccountDeleteConfirmScreen /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
+                <Route path="/feed-update-frequency" element={<ProtectedRoute><FeedUpdateFrequencyScreen /></ProtectedRoute>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </div>
         </div>
       </Router>

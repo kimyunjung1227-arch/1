@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import { Swiper, SwiperSlide } from 'swiper/react';
 import BottomNavigation from '../components/BottomNavigation';
 import { getPost } from '../api/posts';
 import { getDisplayImageUrl } from '../api/upload';
@@ -9,9 +10,10 @@ import { getTimeAgo } from '../utils/dateUtils';
 import { toggleLike, isPostLiked, addComment, getPostAccuracyCount, hasUserMarkedAccurate, toggleAccuracyFeedback } from '../utils/socialInteractions';
 import { toggleInterestPlace, isInterestPlace } from '../utils/interestPlaces';
 import { getEarnedBadgesForUser } from '../utils/badgeSystem';
-import { getUserLevel } from '../utils/levelSystem';
+import { getTrustScore, getTrustGrade } from '../utils/trustIndex';
 import { follow, unfollow, isFollowing } from '../utils/followSystem';
 import { logger } from '../utils/logger';
+import 'swiper/css';
 
 // 영어 태그를 한국어로 번역
 const tagTranslations = {
@@ -132,11 +134,13 @@ const PostDetailScreen = () => {
   const [submitting, setSubmitting] = useState(false);
   const [representativeBadge, setRepresentativeBadge] = useState(null);
   const [userBadges, setUserBadges] = useState([]);
-  const [authorLevelInfo, setAuthorLevelInfo] = useState(null);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+  const [isCommentSectionOpen, setIsCommentSectionOpen] = useState(false);
   const [isFollowAuthor, setIsFollowAuthor] = useState(false);
   const [accuracyMarked, setAccuracyMarked] = useState(false);
   const [accuracyCount, setAccuracyCount] = useState(0);
+  const [authorTrustScore, setAuthorTrustScore] = useState(null);
+  const [authorTrustGrade, setAuthorTrustGrade] = useState(null);
   const [weatherInfo, setWeatherInfo] = useState({
     icon: '☀️',
     condition: '맑음',
@@ -294,17 +298,22 @@ const PostDetailScreen = () => {
     }
   }, [postId, passedPost, navigate, formatQnA]);
 
-  // 정보 정확도 평가 상태 동기화 (API에서 로드한 경우 등)
+  // 정보 정확도 평가 상태 동기화 (서버: post.accuracyCount/userMarked, 로컬: localStorage)
   useEffect(() => {
     if (!post?.id) return;
-    setAccuracyMarked(hasUserMarkedAccurate(post.id));
-    setAccuracyCount(getPostAccuracyCount(post.id));
-  }, [post?.id]);
+    if (typeof post.userMarked === 'boolean' || typeof post.accuracyCount === 'number') {
+      setAccuracyMarked(!!post.userMarked);
+      setAccuracyCount(Number(post.accuracyCount) || 0);
+    } else {
+      setAccuracyMarked(hasUserMarkedAccurate(post.id));
+      setAccuracyCount(getPostAccuracyCount(post.id));
+    }
+  }, [post?.id, post?.userMarked, post?.accuracyCount]);
 
-  // 정보가 정확해요 버튼 클릭
-  const handleAccuracyClick = useCallback(() => {
+  // 정보가 정확해요 버튼 클릭 (다른 사용자가 누르면 작성자 신뢰지수 상승)
+  const handleAccuracyClick = useCallback(async () => {
     if (!post?.id) return;
-    const result = toggleAccuracyFeedback(post.id);
+    const result = await toggleAccuracyFeedback(post.id);
     setAccuracyMarked(result.marked);
     setAccuracyCount(result.newCount);
   }, [post?.id]);
@@ -357,12 +366,15 @@ const PostDetailScreen = () => {
 
     // 좋아요를 누를 때만 애니메이션 표시 (좋아요 취소가 아닐 때)
     if (result.isLiked && !wasLiked) {
+      // 애니메이션이 끝난 뒤에도 항상 가득 찬 하트 상태 유지
+      setLiked(true);
+
       setShowHeartAnimation(true);
 
-      // 애니메이션 완료 후 숨기기
+      // 애니메이션 완료 후 효과만 숨기기 (하트 상태는 유지)
       setTimeout(() => {
         setShowHeartAnimation(false);
-      }, 1000);
+      }, 600);
     }
 
     logger.log(result.isLiked ? '❤️ 좋아요!' : '💔 좋아요 취소');
@@ -586,18 +598,44 @@ const PostDetailScreen = () => {
     setIsVerticalSwipe(false);
   };
 
-  // 마우스 이벤트 핸들러
-  const handleMouseDown = (e) => {
-    e.preventDefault();
-    handleStart(e);
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleMouseUp);
+  // 마우스 드래그로 이미지 슬라이드 전용 (게시물 전환은 터치 위주)
+  const mouseDragStartRef = useRef(null);
+
+  const handleImageMouseDown = (e) => {
+    mouseDragStartRef.current = { x: e.clientX, y: e.clientY };
   };
 
-  const handleMouseUp = () => {
-    handleEnd();
-    document.removeEventListener('mousemove', handleMove);
-    document.removeEventListener('mouseup', handleMouseUp);
+  const handleImageMouseUp = (e) => {
+    if (!mouseDragStartRef.current) return;
+
+    const startX = mouseDragStartRef.current.x;
+    const startY = mouseDragStartRef.current.y;
+    const endX = e.clientX;
+    const endY = e.clientY;
+
+    const diffX = startX - endX;
+    const diffY = startY - endY;
+
+    const maxIndex = mediaItems.length > 0 ? mediaItems.length : images.length;
+    if (maxIndex <= 1) {
+      mouseDragStartRef.current = null;
+      return;
+    }
+
+    // 좌우 이동이 상하보다 크고, 일정 거리 이상일 때만 슬라이드
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 40) {
+      if (diffX > 0) {
+        // 왼쪽으로 드래그: 다음 이미지
+        const nextIndex = currentImageIndex < maxIndex - 1 ? currentImageIndex + 1 : 0;
+        setCurrentImageIndex(nextIndex);
+      } else {
+        // 오른쪽으로 드래그: 이전 이미지
+        const prevIndex = currentImageIndex > 0 ? currentImageIndex - 1 : maxIndex - 1;
+        setCurrentImageIndex(prevIndex);
+      }
+    }
+
+    mouseDragStartRef.current = null;
   };
 
   // 터치 이벤트 핸들러
@@ -679,9 +717,22 @@ const PostDetailScreen = () => {
       setRepresentativeBadge(repBadge);
     }
 
-    // 5) 레벨 정보 로드 (작성자 기준)
-    const levelInfo = getUserLevel();
-    setAuthorLevelInfo(levelInfo);
+    // 5) 작성자 신뢰지수 (로컬 게시물 + 현재 게시물로 계산, 다른 사용자 게시물에서도 표시)
+    const getPostAuthorId = (p) => {
+      const id = p?.userId ?? (typeof p?.user === 'string' ? p.user : p?.user?.id) ?? p?.user;
+      return id != null ? String(id) : '';
+    };
+    const uploadedPosts = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
+    const sameAuthorPosts = uploadedPosts.filter((p) => getPostAuthorId(p) === String(postUserId));
+    const withCurrent = post?.id || post?._id
+      ? sameAuthorPosts.some((p) => (p.id || p._id) === (post.id || post._id))
+        ? sameAuthorPosts
+        : [post, ...sameAuthorPosts]
+      : [post, ...sameAuthorPosts];
+    const score = getTrustScore(postUserId, withCurrent.length ? withCurrent : null);
+    const { grade } = getTrustGrade(score, postUserId, withCurrent.length ? withCurrent : null);
+    setAuthorTrustScore(score);
+    setAuthorTrustGrade(grade);
   }, [post]);
 
   // 초기 데이터 로드
@@ -762,82 +813,47 @@ const PostDetailScreen = () => {
     }
   }, [locationText, detailedLocationText]);
 
-  // 날씨 정보 가져오기 - useMemo 정의 후에 실행
+  // 날씨 정보: 항상 업로드 시점(사용자가 올린 시간) 기준으로 표시. 시간이 지나도 업로드 당시 날씨 유지
   useEffect(() => {
-    if (post && locationText) {
-      const fetchWeather = async (forceRefresh = false) => {
-        try {
-          setWeatherInfo(prev => ({ ...prev, loading: true }));
+    if (!post) return;
 
-          // 게시물 생성 시간 확인
-          const postCreatedAt = post.createdAt || post.timestamp || post.photoDate;
-          const postTime = postCreatedAt ? new Date(postCreatedAt).getTime() : Date.now();
-          const currentTime = Date.now();
-          const hoursSincePost = (currentTime - postTime) / (1000 * 60 * 60); // 시간 단위
-          const isOlderThan48Hours = hoursSincePost >= 48;
-
-          logger.log(`📅 게시물 시간 정보:`, {
-            postCreatedAt,
-            hoursSincePost: hoursSincePost.toFixed(2),
-            isOlderThan48Hours
-          });
-
-          // 48시간 이상 지난 게시물은 저장된 날씨 정보 사용하거나 표시하지 않음
-          if (isOlderThan48Hours) {
-            if (post.weather) {
-              logger.log(`⏰ 48시간 이상 지난 게시물 - 저장된 날씨 정보 사용`);
-              setWeatherInfo({
-                icon: post.weather.icon,
-                condition: post.weather.condition,
-                temperature: post.weather.temperature,
-                loading: false
-              });
-            } else {
-              logger.log(`⏰ 48시간 이상 지난 게시물 - 날씨 정보 없음 (현재 날씨 호출 안함)`);
-              setWeatherInfo(prev => ({ ...prev, loading: false, condition: '정보 없음', temperature: '' }));
-            }
-            return;
-          }
-
-          // 48시간 이내인 경우만 현재 날씨 가져오기
-          const result = await getWeatherByRegion(locationText, forceRefresh);
-          if (result.success) {
-            setWeatherInfo({
-              icon: result.weather.icon,
-              condition: result.weather.condition,
-              temperature: result.weather.temperature,
-              loading: false
-            });
-          } else {
-            setWeatherInfo(prev => ({ ...prev, loading: false }));
-          }
-        } catch (error) {
-          console.error('날씨 정보 조회 실패:', error);
-          setWeatherInfo(prev => ({ ...prev, loading: false }));
-        }
-      };
-
-      fetchWeather();
-
-      // 48시간 이상 지난 게시물은 주기적 갱신하지 않음
-      const postCreatedAt = post.createdAt || post.timestamp || post.photoDate;
-      const postTime = postCreatedAt ? new Date(postCreatedAt).getTime() : Date.now();
-      const currentTime = Date.now();
-      const hoursSincePost = (currentTime - postTime) / (1000 * 60 * 60);
-      const isOlderThan48Hours = hoursSincePost >= 48;
-
-      if (!isOlderThan48Hours) {
-        // 날씨 정보 주기적 갱신 (5분마다) - 48시간 이내 게시물만
-        const weatherInterval = setInterval(() => {
-          logger.log(`🔄 날씨 정보 자동 갱신: ${locationText}`);
-          fetchWeather(true); // 강제 새로고침
-        }, 5 * 60 * 1000);
-
-        return () => {
-          clearInterval(weatherInterval);
-        };
-      }
+    if (post.weather) {
+      // 저장된 업로드 시점 날씨 사용 (몇 시간이 지나도 변경하지 않음)
+      setWeatherInfo({
+        icon: post.weather.icon,
+        condition: post.weather.condition,
+        temperature: post.weather.temperature,
+        loading: false
+      });
+      return;
     }
+
+    // 예전에 올린 글처럼 날씨가 없는 경우에만 현재 지역 날씨를 참고용으로 한 번만 조회
+    if (!locationText) {
+      setWeatherInfo(prev => ({ ...prev, loading: false }));
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setWeatherInfo(prev => ({ ...prev, loading: true }));
+        const result = await getWeatherByRegion(locationText);
+        if (cancelled) return;
+        if (result?.success && result.weather) {
+          setWeatherInfo({
+            icon: result.weather.icon,
+            condition: result.weather.condition,
+            temperature: result.weather.temperature,
+            loading: false
+          });
+        } else {
+          setWeatherInfo(prev => ({ ...prev, loading: false, condition: '정보 없음', temperature: '' }));
+        }
+      } catch (error) {
+        if (!cancelled) setWeatherInfo(prev => ({ ...prev, loading: false }));
+      }
+    })();
+    return () => { cancelled = true; };
   }, [post, locationText]);
 
   // 작성자 팔로우 여부 로드 및 followsUpdated 구독
@@ -853,7 +869,7 @@ const PostDetailScreen = () => {
   if (loading) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-background-light dark:bg-background-dark">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-400"></div>
       </div>
     );
   }
@@ -899,19 +915,6 @@ const PostDetailScreen = () => {
           </button>
         </div>
 
-        {/* 하트 애니메이션 오버레이 */}
-        {showHeartAnimation && (
-          <div className="absolute inset-0 flex items-center justify-center z-[9999] pointer-events-none">
-            {/* 펄스 링 (큰 하트 강조 효과) */}
-            <div className="pulse-ring"></div>
-
-            {/* 큰 중앙 하트 */}
-            <div className="heart-animation">
-              <span className="text-[120px]" style={{ color: '#ef4444' }}>♥️</span>
-            </div>
-          </div>
-        )}
-
         {/* 게시물 간 이동 가이드 화살표 (가벼운 스타일) */}
         {slideablePosts.length > 1 && (
           <>
@@ -928,62 +931,124 @@ const PostDetailScreen = () => {
           <div
             className="image-swipe-area w-full gap-1 overflow-hidden bg-white dark:bg-gray-900 flex relative shadow-md"
             style={{ height: '60vh', minHeight: '330px', marginTop: '-64px' }}
-            onTouchStart={(e) => {
-              setIsImageAreaTouch(true);
-              handleTouchStart(e);
-            }}
-            onTouchMove={(e) => {
-              // 이미지 영역에서는 preventDefault로 스크롤 방지
-              e.preventDefault();
-              handleTouchMove(e);
-            }}
-            onMouseDown={(e) => {
-              setIsImageAreaTouch(true);
-              handleMouseDown(e);
-            }}
           >
-            <div
-              className="w-full overflow-hidden"
-            >
-              <div
-                className="flex transition-transform duration-300 ease-in-out"
-                style={{ transform: `translateX(-${currentImageIndex * 100}%)` }}
-              >
-                {mediaItems.length > 0 ? mediaItems.map((media, index) => (
+            {/* 프로필 - 사진 위 오버레이 */}
+            <div className="absolute top-3 left-3 right-3 z-20 pointer-events-none">
+              <div className="flex items-center justify-between bg-white/90 dark:bg-gray-900/90 rounded-2xl px-3 py-2 shadow-sm pointer-events-auto">
+                <div
+                  className="flex gap-3 items-center cursor-pointer hover:opacity-80 transition-opacity flex-1 min-w-0"
+                  onClick={() => {
+                    const postUserId = post?.userId ||
+                      (typeof post?.user === 'string' ? post.user : post?.user?.id) ||
+                      post?.user;
+                    const currentUserId = user?.id;
+                    if (postUserId && postUserId !== currentUserId) {
+                      navigate(`/user/${postUserId}`);
+                    } else if (postUserId && postUserId === currentUserId) {
+                      navigate('/profile');
+                    }
+                  }}
+                >
                   <div
-                    key={index}
-                    className="w-full flex-shrink-0 relative"
-                    style={{ height: '60vh', minHeight: '330px' }}
-                  >
-                    {media.type === 'video' ? (
-                      <video
-                        src={media.url}
-                        className="w-full h-full object-cover"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        controls={false}
-                      />
-                    ) : (
-                      <img
-                        src={media.url}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
+                    className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-10 w-10 ring-2 ring-gray-200 dark:ring-gray-700 flex-shrink-0"
+                    style={{ backgroundImage: `url("${post?.userAvatar || 'https://i.pravatar.cc/150?u=' + userName}")` }}
+                  />
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[#181410] dark:text-white text-sm font-bold leading-tight truncate">
+                        {userName}
+                      </p>
+                      {representativeBadge && (
+                        <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full flex-shrink-0">
+                          <span className="text-xs">{representativeBadge.icon}</span>
+                          <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 max-w-[72px] truncate">
+                            {representativeBadge.name}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {(authorTrustScore != null || authorTrustGrade) && (
+                      <div className="mt-0.5">
+                        <p className="text-[11px] text-text-secondary-light dark:text-text-secondary-dark flex items-center gap-1">
+                          <span>신뢰지수</span>
+                          <span className="font-semibold text-gray-700 dark:text-gray-300">{authorTrustScore ?? 0}</span>
+                          {authorTrustGrade && (
+                            <span className="text-gray-600 dark:text-gray-400 text-[11px]">
+                              {authorTrustGrade.icon} {authorTrustGrade.name}
+                            </span>
+                          )}
+                        </p>
+                      </div>
                     )}
                   </div>
-                )) : images.map((image, index) => (
-                  <img
-                    key={index}
-                    src={image}
-                    alt=""
-                    className="w-full flex-shrink-0 object-cover"
-                    style={{ height: '60vh', minHeight: '330px' }}
-                  />
-                ))}
+                </div>
+                {postUserId && user?.id && String(postUserId) !== String(user.id) && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isFollowAuthor) {
+                        unfollow(postUserId);
+                        setIsFollowAuthor(false);
+                      } else {
+                        follow(postUserId);
+                        setIsFollowAuthor(true);
+                      }
+                    }}
+                    className={`ml-2 shrink-0 py-1.5 px-3 rounded-xl text-xs font-semibold ${
+                      isFollowAuthor ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' : 'bg-primary text-white hover:opacity-90'
+                    }`}
+                  >
+                    {isFollowAuthor ? '팔로잉' : '팔로우'}
+                  </button>
+                )}
               </div>
             </div>
+
+            <Swiper
+              onSlideChange={(swiper) => setCurrentImageIndex(swiper.activeIndex)}
+              initialSlide={currentImageIndex}
+              speed={280}
+              resistanceRatio={0.85}
+              className="w-full h-full"
+            >
+              {mediaItems.length > 0
+                ? mediaItems.map((media, index) => (
+                    <SwiperSlide key={index}>
+                      <div
+                        className="w-full flex-shrink-0 relative"
+                        style={{ height: '60vh', minHeight: '330px' }}
+                      >
+                        {media.type === 'video' ? (
+                          <video
+                            src={media.url}
+                            className="w-full h-full object-cover"
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            controls={false}
+                          />
+                        ) : (
+                          <img
+                            src={media.url}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                      </div>
+                    </SwiperSlide>
+                  ))
+                : images.map((image, index) => (
+                    <SwiperSlide key={index}>
+                      <img
+                        src={image}
+                        alt=""
+                        className="w-full flex-shrink-0 object-cover"
+                        style={{ height: '60vh', minHeight: '330px' }}
+                      />
+                    </SwiperSlide>
+                  ))}
+            </Swiper>
 
             {(mediaItems.length > 1 || images.length > 1) && (
               <>
@@ -993,115 +1058,42 @@ const PostDetailScreen = () => {
                     <div
                       key={index}
                       onClick={() => setCurrentImageIndex(index)}
-                      className={`h-1.5 rounded-full transition-all cursor-pointer ${index === currentImageIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/70'
-                        }`}
+                      className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                        index === currentImageIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/70'
+                      }`}
                     ></div>
                   ))}
                 </div>
-
-                {/* 좌우 화살표 버튼 - 검정 원형 배경 */}
-                <button
-                  onClick={() => handleImageSwipe('right')}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black text-white rounded-full w-12 h-12 flex items-center justify-center hover:bg-black/80 transition-colors z-10"
-                >
-                  <span className="material-symbols-outlined text-3xl">chevron_left</span>
-                </button>
-                <button
-                  onClick={() => handleImageSwipe('left')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black text-white rounded-full w-12 h-12 flex items-center justify-center hover:bg-black/80 transition-colors z-10"
-                >
-                  <span className="material-symbols-outlined text-3xl">chevron_right</span>
-                </button>
               </>
             )}
           </div>
         </div>
 
         <main className="flex flex-col bg-white dark:bg-gray-900" style={{ minHeight: 'auto' }}>
-          {/* 통합 정보 - 작성자 정보 + 내용 */}
           <div className="px-4 pt-4 pb-3">
-            {/* 👤 작성자 정보 */}
-            <div className="flex items-center justify-between mb-4">
-                <div
-                  className="flex gap-3 items-center cursor-pointer hover:opacity-80 transition-opacity flex-1"
-                  onClick={() => {
-                    // userId 추출 (여러 형태 지원)
-                    const postUserId = post?.userId ||
-                      (typeof post?.user === 'string' ? post.user : post?.user?.id) ||
-                      post?.user;
-                    const currentUserId = user?.id;
-
-                    logger.log('프로필 이동:', { postUserId, currentUserId, isSame: postUserId === currentUserId });
-
-                    // 현재 사용자와 다른 사용자일 때만 프로필로 이동
-                    if (postUserId && postUserId !== currentUserId) {
-                      navigate(`/user/${postUserId}`);
-                    } else if (postUserId && postUserId === currentUserId) {
-                      // 내 프로필이면 프로필 탭으로 이동
-                      navigate('/profile');
-                    }
-                  }}
-                >
-                  <div
-                    className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-12 w-12 ring-2 ring-primary/20 flex-shrink-0"
-                    style={{ backgroundImage: `url("${post?.userAvatar || 'https://i.pravatar.cc/150?u=' + userName}")` }}
-                  ></div>
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[#181410] dark:text-white text-base font-bold leading-tight truncate">
-                        {userName}
-                      </p>
-                      {representativeBadge && (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-primary/20 border-2 border-primary rounded-full flex-shrink-0">
-                          <span className="text-base">{representativeBadge.icon}</span>
-                          <span className="text-xs font-semibold text-primary max-w-[80px] truncate">
-                            {representativeBadge.name}
-                          </span>
-                        </div>
-                      )}
-                      <span className="material-symbols-outlined text-lg text-gray-400 flex-shrink-0">chevron_right</span>
-                    </div>
-                    {/* 작성자 레벨 표시 */}
-                    <div className="mt-1">
-                      <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                        {authorLevelInfo
-                          ? `Lv. ${authorLevelInfo.level} ${authorLevelInfo.title}`
-                          : 'Lv. 1 여행 입문자'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {/* 팔로우 버튼: 로그인 + 다른 사용자 게시물일 때만 */}
-                {postUserId && user?.id && String(postUserId) !== String(user.id) && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); if (isFollowAuthor) { unfollow(postUserId); setIsFollowAuthor(false); } else { follow(postUserId); setIsFollowAuthor(true); } }}
-                    className={`shrink-0 py-2 px-4 rounded-xl text-sm font-semibold ${isFollowAuthor ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' : 'bg-primary text-white'}`}
-                  >
-                    {isFollowAuthor ? '팔로잉' : '팔로우'}
-                  </button>
-                )}
-              </div>
-
             {/* 📍 위치 정보 */}
             <div className="flex items-start gap-3 mb-4">
-              <span className="material-symbols-outlined text-primary text-2xl flex-shrink-0">location_on</span>
+              <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-2xl flex-shrink-0">location_on</span>
               <div className="flex-1">
                 <div className="flex items-center flex-wrap gap-2 mb-2">
                   <p className="text-base font-bold text-zinc-900 dark:text-zinc-100">
                     {verifiedLocation || detailedLocationText || locationText}
                   </p>
                   {categoryName && (
-                    <span className="text-xs font-semibold text-white bg-primary px-3 py-1 rounded-full">
+                    <span
+                      title={categoryName}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 text-lg"
+                      aria-label={categoryName}
+                    >
                       {categoryName.includes('개화') && '🌸'}
                       {categoryName.includes('맛집') && '🍜'}
-                      {!categoryName.includes('개화') && !categoryName.includes('맛집') && '🏞️'}
-                      {' '}{categoryName}
+                      {categoryName.includes('야경') && '🌙'}
+                      {categoryName.includes('시즌') && '🍂'}
+                      {!categoryName.includes('개화') && !categoryName.includes('맛집') && !categoryName.includes('야경') && !categoryName.includes('시즌') && '🏞️'}
                     </span>
                   )}
                 </div>
-                {detailedLocationText && detailedLocationText !== locationText && (
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-1">{locationText}</p>
-                )}
+                {/* 지역명이 두 번 반복되어 보이는 것을 막기 위해, 하단의 locationText 한 줄은 숨김 처리 */}
                 {addressText && (
                   <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-3">{addressText}</p>
                 )}
@@ -1122,15 +1114,17 @@ const PostDetailScreen = () => {
                       <>
                         <span className="!text-lg">{weatherInfo.icon}</span>
                         <span>{weatherInfo.condition}, {weatherInfo.temperature}</span>
+                        {post?.weather && (
+                          <span className="text-xs text-zinc-400 dark:text-zinc-500">(업로드 당시)</span>
+                        )}
                       </>
                     )}
                   </div>
                 </div>
-                {/* 지도에서 보기 버튼 */}
                 {fromMap && allPins && mapState && (
                   <button
                     onClick={() => navigate('/map', { state: { mapState, selectedPinId } })}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors text-sm font-semibold"
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm font-semibold"
                   >
                     <span className="material-symbols-outlined text-lg">map</span>
                     <span>지도에서 주변 보기</span>
@@ -1141,7 +1135,7 @@ const PostDetailScreen = () => {
 
             {/* 📝 작성자 노트 */}
             <div className="flex items-start gap-3 mb-4">
-              <span className="material-symbols-outlined text-primary text-2xl flex-shrink-0">edit_note</span>
+              <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-2xl flex-shrink-0">edit_note</span>
               <div className="flex-1">
                 {(post?.note || post?.content) ? (
                   <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
@@ -1157,7 +1151,7 @@ const PostDetailScreen = () => {
 
             {/* 🏷️ 해시태그 */}
               <div className="flex items-start gap-3 mb-4">
-                <span className="material-symbols-outlined text-primary text-2xl flex-shrink-0">tag</span>
+                <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-2xl flex-shrink-0">tag</span>
                 <div className="flex-1">
                   {(() => {
                     const getText = (t) =>
@@ -1189,7 +1183,7 @@ const PostDetailScreen = () => {
                               key={`tag-${index}`}
                               type="button"
                               onClick={handleTagClick}
-                              className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-primary/10 text-primary hover:bg-primary/20 active:bg-primary/30 transition-colors cursor-pointer"
+                              className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                             >
                               #{korean}
                             </button>
@@ -1221,7 +1215,7 @@ const PostDetailScreen = () => {
               </span>
               <span>정보가 정확해요</span>
               {accuracyCount > 0 && (
-                <span className="text-primary font-bold">({accuracyCount})</span>
+                <span className="font-bold text-primary">({accuracyCount})</span>
               )}
             </button>
           </div>
@@ -1229,13 +1223,23 @@ const PostDetailScreen = () => {
           {/* 인터랙션 바 - 좋아요, 댓글, 공유 */}
           <div className="px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-4">
-              {/* 좋아요 */}
+              {/* 좋아요 (하트 아이콘 크기에 맞춘 애니메이션) */}
               <button
                 onClick={handleLike}
                 className="flex items-center gap-2"
               >
-                <span className={`material-symbols-outlined text-2xl ${liked ? 'text-red-500' : 'text-gray-600 dark:text-gray-400'}`} style={liked ? { fontVariationSettings: "'FILL' 1" } : {}}>
-                  {liked ? 'favorite' : 'favorite_border'}
+                <span className="relative inline-flex">
+                  <span
+                    className={`material-symbols-outlined text-2xl ${liked ? 'text-red-500' : 'text-gray-600 dark:text-gray-400'}`}
+                    style={liked ? { fontVariationSettings: "'FILL' 1" } : {}}
+                  >
+                    {liked ? 'favorite' : 'favorite_border'}
+                  </span>
+                  {showHeartAnimation && (
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="heart-animation text-2xl" style={{ color: '#ef4444' }}>♥️</span>
+                    </span>
+                  )}
                 </span>
                 <span className={`text-base font-semibold ${liked ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
                   {likeCount}
@@ -1245,13 +1249,20 @@ const PostDetailScreen = () => {
               {/* 댓글 */}
               <button
                 onClick={() => {
-                  const input = document.getElementById('comment-input');
-                  if (input) {
-                    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    setTimeout(() => {
-                      input.focus();
-                    }, 300);
-                  }
+                  setIsCommentSectionOpen((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      // 열릴 때만 스크롤 + 포커스
+                      setTimeout(() => {
+                        const input = document.getElementById('comment-input');
+                        if (input) {
+                          input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          input.focus();
+                        }
+                      }, 50);
+                    }
+                    return next;
+                  });
                 }}
                 className="flex items-center gap-2"
               >
@@ -1269,69 +1280,72 @@ const PostDetailScreen = () => {
             </button>
           </div>
 
-          {/* 댓글 섹션 */}
-          <div className="flex flex-col gap-3 px-4 py-3 bg-white dark:bg-gray-900">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-[#181410] dark:text-white">
-                댓글 & 질문 {comments.length > 0 && `(${comments.length})`}
-              </h2>
-            </div>
+          {/* 댓글 섹션 - 댓글 버튼을 눌렀을 때만 표시 */}
+          {isCommentSectionOpen && (
+            <div className="flex flex-col gap-3 px-4 py-3 bg-white dark:bg-gray-900">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-[#181410] dark:text-white">
+                  댓글 & 질문 {comments.length > 0 && `(${comments.length})`}
+                </h2>
+              </div>
 
-            {/* 댓글 목록 */}
-            {comments.length > 0 && (
-              <div className="flex flex-col gap-3 mt-2">
-                {comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3">
-                    <div
-                      className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-8 w-8 flex-shrink-0"
-                      style={{ backgroundImage: `url("${comment.avatar}")` }}
-                    ></div>
-                    <div className="flex flex-col flex-1">
-                      <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg rounded-tl-none">
-                        <p className="text-sm font-bold text-[#181410] dark:text-white">
-                          {comment.user}
-                        </p>
-                        <p className="text-sm text-gray-800 dark:text-gray-300 mt-1">
-                          {comment.content}
+              {/* 댓글 목록 */}
+              {comments.length > 0 && (
+                <div className="flex flex-col gap-3 mt-2">
+                  {comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-3">
+                      <div
+                        className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-8 w-8 flex-shrink-0"
+                        style={{ backgroundImage: `url("${comment.avatar}")` }}
+                      ></div>
+                      <div className="flex flex-col flex-1">
+                        <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg rounded-tl-none">
+                          <p className="text-sm font-bold text-[#181410] dark:text-white">
+                            {comment.user}
+                          </p>
+                          <p className="text-sm text-gray-800 dark:text-gray-300 mt-1">
+                            {comment.content}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {getTimeAgo(comment.timestamp)}
                         </p>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {getTimeAgo(comment.timestamp)}
-                      </p>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
 
-            {/* 댓글 입력 */}
-            <div className="flex gap-2 items-center mt-4">
-              <input
-                id="comment-input"
-                className="flex-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl h-14 px-4 text-sm text-[#181410] dark:text-white placeholder:text-gray-400 placeholder:text-sm focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none cursor-text"
-                placeholder="댓글이나 질문을 입력하세요 💬"
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
-                onClick={(e) => e.target.focus()}
-              />
-              <button
-                onClick={handleAddComment}
-                disabled={!commentText.trim()}
-                className={`flex-shrink-0 rounded-xl h-14 px-6 flex items-center justify-center font-bold text-base transition-colors ${commentText.trim()
-                  ? 'bg-primary text-white hover:bg-primary/90'
-                  : 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
+              {/* 댓글 입력 */}
+              <div className="flex gap-2 items-center mt-4">
+                <input
+                  id="comment-input"
+                  className="flex-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl h-14 px-4 text-sm text-[#181410] dark:text-white placeholder:text-gray-400 placeholder:text-sm focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none cursor-text"
+                  placeholder="댓글이나 질문을 입력하세요 💬"
+                  type="text"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
+                  onClick={(e) => e.target.focus()}
+                />
+                <button
+                  onClick={handleAddComment}
+                  disabled={!commentText.trim()}
+                  className={`flex-shrink-0 rounded-xl h-14 px-6 flex items-center justify-center font-bold text-base transition-colors ${
+                    commentText.trim()
+                      ? 'bg-primary text-white hover:opacity-90'
+                      : 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
                   }`}
-              >
-                전송
-              </button>
+                >
+                  전송
+                </button>
+              </div>
+              {/* 하단 스크롤 시 다음 게시물로 이동 감지 */}
+              {slideablePosts.length > 1 && currentPostIndexState < slideablePosts.length - 1 && (
+                <div ref={nextPostSentinelRef} style={{ height: 1, width: '100%', visibility: 'hidden' }} aria-hidden="true" />
+              )}
             </div>
-            {/* 하단 스크롤 시 다음 게시물로 이동 감지 */}
-            {slideablePosts.length > 1 && currentPostIndexState < slideablePosts.length - 1 && (
-              <div ref={nextPostSentinelRef} style={{ height: 1, width: '100%', visibility: 'hidden' }} aria-hidden="true" />
-            )}
-          </div>
+          )}
         </main>
       </div>
 

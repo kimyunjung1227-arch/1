@@ -320,7 +320,7 @@ const RegionDetailScreen = () => {
               {/* 제목 + 대표명소 버튼 (우측) */}
               <div className="flex items-center justify-between px-4 pb-2 pt-5">
                 <h2 className="text-[22px] font-bold leading-tight tracking-[-0.015em] text-text-headings dark:text-gray-100">
-                  현지 실시간 상황
+                  {region.name} 현지 실시간 상황
                 </h2>
                 <button
                   onClick={() => setShowLandmarkModal(true)}
@@ -333,18 +333,20 @@ const RegionDetailScreen = () => {
                 </button>
               </div>
 
-              {/* 필터 버튼 - 슬라이드 가능 */}
+              {/* 필터 버튼 - 슬라이드 가능 (좌·우 여백: 핸드폰에서 잘리지 않도록) */}
               <div className="pb-3 w-full">
                 <div
                   ref={filterScrollRef}
                   onMouseDown={handleFilterDrag}
-                  className="flex gap-2 px-4 overflow-x-scroll overflow-y-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth cursor-grab"
+                  className="flex gap-2 overflow-x-scroll overflow-y-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth cursor-grab"
                   style={{
                     WebkitOverflowScrolling: 'touch',
                     overflowX: 'scroll',
                     overflowY: 'hidden',
                     width: '100%',
-                    scrollSnapType: 'x mandatory'
+                    scrollSnapType: 'x mandatory',
+                    paddingLeft: 'max(20px, env(safe-area-inset-left, 16px))',
+                    paddingRight: 'max(20px, env(safe-area-inset-right, 16px))'
                   }}
                 >
                   <button
@@ -450,22 +452,19 @@ const RegionDetailScreen = () => {
                             });
                           }}
                           style={{
-                            background: '#ffffff',
-                            borderRadius: '12px',
-                            overflow: 'hidden',
-                            boxShadow: '0 2px 6px rgba(15,23,42,0.08)',
+                            overflow: 'visible',
                             cursor: 'pointer',
                             display: 'flex',
                             flexDirection: 'column'
                           }}
                         >
-                          {/* 이미지: 정사각형, 좋아요 뱃지 포함 */}
-                          <div style={{ width: '100%', paddingBottom: '100%', height: 0, position: 'relative', background: '#e5e7eb' }}>
+                          {/* 이미지: 정사각형, 지금 여기는 더보기와 동일 구조 */}
+                          <div style={{ width: '100%', paddingBottom: '125%', height: 0, position: 'relative', background: '#e5e7eb', borderRadius: '14px', overflow: 'hidden', marginBottom: '4px' }}>
                             {photo.videos && photo.videos.length > 0 ? (
                               <video
                                 src={getDisplayImageUrl(photo.videos[0])}
                                 className="w-full h-full object-cover"
-                                style={{ position: 'absolute', top: 0, left: 0 }}
+                                style={{ position: 'absolute', top: 0, left: 0, borderRadius: '14px' }}
                                 autoPlay
                                 loop
                                 muted
@@ -477,16 +476,44 @@ const RegionDetailScreen = () => {
                                   <img
                                     src={getDisplayImageUrl(photo.image)}
                                     alt={photo.location || region.name}
-                                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '14px' }}
                                   />
                                 ) : (
-                                  <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      top: 0,
+                                      left: 0,
+                                      width: '100%',
+                                      height: '100%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: '#cbd5e1',
+                                      borderRadius: '14px'
+                                    }}
+                                  >
                                     <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>image</span>
                                   </div>
                                 )}
                               </>
                             )}
-                            <div style={{ position: 'absolute', bottom: '4px', right: '4px', background: 'rgba(255,255,255,0.9)', padding: '2px 6px', borderRadius: '999px', fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', color: '#1f2937' }}>
+                            <div
+                              style={{
+                                position: 'absolute',
+                                bottom: '4px',
+                                right: '4px',
+                                background: 'rgba(255,255,255,0.9)',
+                                padding: '2px 6px',
+                                borderRadius: '999px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#1f2937'
+                              }}
+                            >
                               <span className={`material-symbols-outlined text-base ${isLiked ? 'text-red-500' : 'text-gray-600'}`}>
                                 favorite
                               </span>
@@ -494,17 +521,57 @@ const RegionDetailScreen = () => {
                             </div>
                           </div>
 
-                          {/* 하단 시트: "지금 여기는" 더보기 스타일 */}
-                          <div style={{ padding: '12px 14px 14px', background: '#f8fafc', borderTop: '3px solid #475569', boxShadow: '0 -2px 0 0 #475569, 0 2px 8px rgba(0,0,0,0.08)', minHeight: '92px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          {/* 하단 정보 영역: "지금 여기는" 더보기와 동일 구조 */}
+                          <div
+                            style={{
+                              padding: '6px 14px 10px',
+                              minHeight: '92px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                color: '#111827',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0
+                              }}
+                            >
                               📍 {photo.detailedLocation || photo.placeName || photo.location || region.name}
                             </div>
                             {(photo.note || photo.content) && (
-                              <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px', lineHeight: 1.4, height: '2.8em', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                              <div
+                                style={{
+                                  fontSize: '12px',
+                                  color: '#4b5563',
+                                  marginTop: '4px',
+                                  lineHeight: 1.4,
+                                  height: '2.8em',
+                                  overflow: 'hidden',
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical'
+                                }}
+                              >
                                 {photo.note || photo.content}
                               </div>
                             )}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', flexShrink: 0, fontSize: '11px', color: '#6b7280' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginTop: '4px',
+                                flexShrink: 0,
+                                fontSize: '11px',
+                                color: '#6b7280'
+                              }}
+                            >
                               <span>{photo.time}</span>
                               {hasWeather && (
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

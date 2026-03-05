@@ -1,8 +1,12 @@
 import api from './axios';
 import { logger } from '../utils/logger';
+import { supabase } from '../utils/supabaseClient';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const UPLOAD_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
+
+// Supabase Storage 버킷 이름 (콘솔에서 동일한 이름으로 생성 필요)
+const SUPABASE_IMAGE_BUCKET = 'post-images';
 
 /**
  * 표시용 이미지/동영상 URL로 변환
@@ -35,10 +39,64 @@ const fileToBase64 = (file) => {
   });
 };
 
+// Supabase Storage 에 이미지 업로드 후 public URL 반환
+const uploadImageToSupabase = async (file) => {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
+    const ext = file.name?.split('.').pop() || 'jpg';
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const filePath = `uploads/${fileName}`;
+
+    const { error: uploadError } = await supabase
+      .storage
+      .from(SUPABASE_IMAGE_BUCKET)
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type || 'image/jpeg',
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data } = supabase
+      .storage
+      .from(SUPABASE_IMAGE_BUCKET)
+      .getPublicUrl(filePath);
+
+    const publicUrl = data?.publicUrl;
+    if (!publicUrl) {
+      throw new Error('Failed to get public URL from Supabase');
+    }
+
+    logger.log('✅ Supabase Storage 이미지 업로드 성공:', publicUrl);
+
+    return {
+      success: true,
+      url: publicUrl,
+      isTemporary: false,
+      storage: 'supabase',
+    };
+  } catch (error) {
+    logger.warn('Supabase Storage 이미지 업로드 실패 (백엔드/Blob으로 fallback):', error);
+    return { success: false, error };
+  }
+};
+
 // 단일 이미지 업로드
 export const uploadImage = async (file) => {
   try {
-    // 먼저 백엔드 시도
+    // 1순위: Supabase Storage 업로드 시도
+    const supabaseResult = await uploadImageToSupabase(file);
+    if (supabaseResult.success && supabaseResult.url) {
+      return supabaseResult;
+    }
+
+    // 2순위: 기존 백엔드 REST API 시도
     const formData = new FormData();
     formData.append('image', file);
 
@@ -49,17 +107,16 @@ export const uploadImage = async (file) => {
     });
     return response.data;
   } catch (error) {
-    // 백엔드 실패 시 임시 URL 반환 (Base64는 용량이 너무 커서 사용 안 함)
-    logger.log('⚠️ 백엔드 없음 - 임시 URL 반환');
-    logger.warn('💡 이미지가 서버에 업로드되지 않았습니다. 백엔드 서버를 확인해주세요.');
-    
-    // Blob URL 생성 (메모리에만 존재, localStorage에 저장되지 않음)
+    // Supabase / 백엔드 모두 실패 시 마지막 fallback: Blob URL
+    logger.log('⚠️ 이미지 업로드 실패 - Blob URL fallback 사용');
+    logger.warn('💡 이미지가 서버(Supabase/백엔드)에 업로드되지 않았습니다. 네트워크 또는 설정을 확인해주세요.');
+
     const blobUrl = URL.createObjectURL(file);
-    
+
     return {
       success: true,
-      url: blobUrl, // Blob URL (임시)
-      isTemporary: true, // 임시 URL임을 표시
+      url: blobUrl,
+      isTemporary: true,
       analysis: {
         category: 'general',
         categoryName: '일반',

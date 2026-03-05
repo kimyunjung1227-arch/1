@@ -3,8 +3,10 @@
  * 좋아요, 댓글, 북마크 관리
  */
 
+import api from '../api/axios';
 import { notifyLikeMilestone, notifyTotalLikesMilestone, notifyNewLike, notifyPostHelped } from './browserNotifications';
-import { checkNewBadges, awardBadge, calculateUserStats } from './badgeSystem';
+import { checkNewBadges, awardBadge, calculateUserStats, getEarnedBadges, BADGES } from './badgeSystem';
+import { getTrustScore, getTrustGrade, getTrustBadgeIdForScore } from './trustIndex';
 import { logger } from './logger';
 
 // 좋아요 토글
@@ -250,8 +252,28 @@ export const hasUserMarkedAccurate = (postId) => {
   return !!marks[postId];
 };
 
-/** "정보가 정확해요" 토글 (한 번 누르면 표시, 다시 누르면 취소) */
-export const toggleAccuracyFeedback = (postId) => {
+const isServerPostId = (id) => typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id);
+
+/** "정보가 정확해요" 토글 — 다른 사용자가 누르면 게시물 작성자 신뢰지수 상승 (서버 우선, 없으면 로컬) */
+export const toggleAccuracyFeedback = async (postId) => {
+  if (isServerPostId(postId)) {
+    try {
+      const res = await api.post(`/posts/${postId}/accuracy`);
+      const data = res.data || {};
+      if (data.success) {
+        const marked = !!data.marked;
+        const newCount = Number(data.accuracyCount) || 0;
+        const marks = JSON.parse(localStorage.getItem(USER_ACCURACY_MARKS_KEY) || '{}');
+        marks[postId] = marked;
+        localStorage.setItem(USER_ACCURACY_MARKS_KEY, JSON.stringify(marks));
+        window.dispatchEvent(new CustomEvent('trustIndexUpdated'));
+        return { marked, newCount };
+      }
+    } catch (err) {
+      logger.warn('정확해요 API 실패, 로컬 처리:', err?.message);
+    }
+  }
+
   const marks = JSON.parse(localStorage.getItem(USER_ACCURACY_MARKS_KEY) || '{}');
   const counts = JSON.parse(localStorage.getItem(ACCURACY_COUNT_KEY) || '{}');
   const wasMarked = !!marks[postId];
@@ -262,6 +284,29 @@ export const toggleAccuracyFeedback = (postId) => {
 
   localStorage.setItem(USER_ACCURACY_MARKS_KEY, JSON.stringify(marks));
   localStorage.setItem(ACCURACY_COUNT_KEY, JSON.stringify(counts));
+
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const currentUserId = currentUser?.id ? String(currentUser.id) : null;
+  const storagePosts = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
+  const post = storagePosts.find((p) => p.id === postId);
+  const postAuthorId = post && (post.userId ?? (typeof post.user === 'string' ? post.user : post.user?.id) ?? post.user);
+  const authorIsMe = postAuthorId != null && String(postAuthorId) === currentUserId;
+
+  if (authorIsMe) {
+    try {
+      const score = getTrustScore();
+      const badgeId = getTrustBadgeIdForScore(score);
+      if (badgeId && BADGES[badgeId] && !getEarnedBadges().some((b) => b.name === badgeId)) {
+        const awarded = awardBadge(BADGES[badgeId], {});
+        if (awarded) {
+          window.dispatchEvent(new CustomEvent('badgeEarned', { detail: BADGES[badgeId] }));
+        }
+      }
+      window.dispatchEvent(new CustomEvent('trustIndexUpdated', { detail: { score, grade: getTrustGrade(score).grade } }));
+    } catch (e) {
+      logger.error('신뢰지수 뱃지 부여 확인 실패', e);
+    }
+  }
 
   return {
     marked: !wasMarked,

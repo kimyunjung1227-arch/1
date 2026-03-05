@@ -2,9 +2,26 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 const Post = require('../models/Post');
 const User = require('../models/User');
 const { generateSmartTags } = require('../services/aiTagService');
+
+// JWT에서 userId 추출 (auth 라우트와 동일한 payload: userId)
+const getUserIdFromReq = (req) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  try {
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production'
+    );
+    return decoded.userId || decoded.id || null;
+  } catch {
+    return null;
+  }
+};
 
 // MongoDB ObjectId 유효성 검사 (24자 hex)
 const isValidObjectId = (id) => {
@@ -108,7 +125,49 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('게시물 조회 오류:', error.message || error);
-    res.status(500).json({ success: false, error: '게시물 목록을 불러오는 중 오류가 발생했습니다.' });
+    res.status(500).json({ success: false, error: '게시물 목록을 불러오는 중 오류가 발생했습니다.'     });
+  }
+});
+
+// 정보가 정확해요 토글 (다른 사용자가 누르면 게시물 작성자 신뢰지수 상승)
+router.post('/:id/accuracy', async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const userId = getUserIdFromReq(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
+    }
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ success: false, error: 'DB 연결이 없습니다.' });
+    }
+    if (!isValidObjectId(postId)) {
+      return res.status(404).json({ success: false, error: '게시물을 찾을 수 없습니다.' });
+    }
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ success: false, error: '게시물을 찾을 수 없습니다.' });
+    }
+    const marked = (post.accuracyMarkedBy || []).some(
+      (oid) => oid && oid.toString() === userId.toString()
+    );
+    if (marked) {
+      await post.removeAccuracyMark(userId);
+      return res.json({
+        success: true,
+        marked: false,
+        accuracyCount: post.accuracyCount || 0
+      });
+    }
+    await post.addAccuracyMark(userId);
+    const updated = await Post.findById(postId).select('accuracyCount accuracyMarkedBy').lean();
+    return res.json({
+      success: true,
+      marked: true,
+      accuracyCount: updated.accuracyCount || 0
+    });
+  } catch (error) {
+    console.error('정확해요 토글 오류:', error.message || error);
+    res.status(500).json({ success: false, error: '처리 중 오류가 발생했습니다.' });
   }
 });
 
@@ -151,9 +210,17 @@ router.get('/:id', async (req, res) => {
       console.warn('조회수 저장 실패 (무시):', saveErr.message);
     }
 
+    const userId = getUserIdFromReq(req);
+    const postObj = post.toObject ? post.toObject() : { ...post };
+    postObj.accuracyCount = post.accuracyCount ?? 0;
+    postObj.userMarked = !!(
+      userId &&
+      (post.accuracyMarkedBy || []).some((oid) => oid && oid.toString() === userId.toString())
+    );
+
     res.json({
       success: true,
-      post,
+      post: postObj,
       message: '게시물 상세 정보'
     });
   } catch (error) {

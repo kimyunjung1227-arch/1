@@ -234,8 +234,8 @@ router.post('/login', async (req, res) => {
     const User = require('../models/User');
     const bcrypt = require('bcryptjs');
 
-    // 이메일로 사용자 찾기
-    const user = await User.findOne({ email, socialProvider: 'local' });
+    // 이메일로 사용자 찾기 (비밀번호 필드 포함)
+    const user = await User.findOne({ email, socialProvider: 'local' }).select('+password');
     
     if (!user) {
       return res.status(401).json({
@@ -341,11 +341,11 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// 사용자 정보 조회 (JWT 토큰으로)
+// 사용자 정보 조회 (JWT 토큰으로) — 신뢰지수(다른 사용자가 정확해요 누른 합계) 포함
 router.get('/me', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
@@ -360,6 +360,7 @@ router.get('/me', async (req, res) => {
     );
 
     const User = require('../models/User');
+    const Post = require('../models/Post');
     const user = await User.findById(decoded.userId).select('-password');
 
     if (!user) {
@@ -369,6 +370,14 @@ router.get('/me', async (req, res) => {
       });
     }
 
+    let trustScore = 0;
+    try {
+      const userPosts = await Post.find({ user: user._id }).select('accuracyCount').lean();
+      trustScore = userPosts.filter((p) => (p.accuracyCount || 0) >= 1).length;
+    } catch (e) {
+      // 무시
+    }
+
     res.json({
       success: true,
       user: {
@@ -376,7 +385,8 @@ router.get('/me', async (req, res) => {
         username: user.username,
         email: user.email,
         profileImage: user.profileImage,
-        socialProvider: user.socialProvider
+        socialProvider: user.socialProvider,
+        trustScore
       }
     });
   } catch (error) {

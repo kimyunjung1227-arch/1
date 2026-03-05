@@ -28,7 +28,12 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true
   },
-  
+  // 로컬(이메일) 로그인용 비밀번호 (소셜 로그인 사용자에는 없음)
+  password: {
+    type: String,
+    select: false
+  },
+
   // 프로필
   profileImage: {
     type: String,

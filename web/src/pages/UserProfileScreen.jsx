@@ -8,6 +8,8 @@ import { follow, unfollow, isFollowing, getFollowerCount, getFollowingCount } fr
 import { logger } from '../utils/logger';
 import { getDisplayImageUrl } from '../api/upload';
 import { getPosts } from '../api/posts';
+import { getTrustScore, getTrustGrade } from '../utils/trustIndex';
+import api from '../api/axios';
 
 const UserProfileScreen = () => {
   const navigate = useNavigate();
@@ -28,6 +30,7 @@ const UserProfileScreen = () => {
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
+  const [trustScore, setTrustScore] = useState(0);
 
   // 지도 관련
   const mapRef = useRef(null);
@@ -48,6 +51,7 @@ const UserProfileScreen = () => {
     setRepresentativeBadge(null);
     setStats({ posts: 0 });
     setShowAllBadges(false);
+    setTrustScore(0);
 
     // 해당 사용자의 정보 찾기 (게시물에서)
     const uploadedPosts = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
@@ -81,7 +85,7 @@ const UserProfileScreen = () => {
         (typeof userPost.user === 'string' ? userPost.user : userPost.user?.id) ||
         userPost.user;
       const foundUser = {
-        id: String(userId), // 일관성을 위해 문자열로 변환
+        id: String(userId),
         username: (typeof userPost.user === 'string' ? userPost.user : userPost.user?.username) ||
           String(postUserId) ||
           '사용자',
@@ -89,7 +93,6 @@ const UserProfileScreen = () => {
       };
       setUser(foundUser);
     } else {
-      // 사용자 정보를 찾을 수 없으면 기본값
       setUser({
         id: String(userId),
         username: '사용자',
@@ -97,18 +100,21 @@ const UserProfileScreen = () => {
       });
     }
 
-    // 뱃지 로드 - 실제 구현된 뱃지 시스템 사용
+    // 뱃지 로드 (현재 로컬/서버 기준 실제 데이터만 사용)
     const badges = getEarnedBadgesForUser(userId) || [];
     setEarnedBadges(badges);
 
-    // 대표 뱃지 로드
+    // 대표 뱃지: 본인은 로컬/획득 뱃지, 다른 사용자는 서버/로컬에 있을 때만
+    const isOwnProfile = currentUser && String(userId) === String(currentUser.id);
     const repBadgeJson = localStorage.getItem(`representativeBadge_${userId}`);
     if (repBadgeJson) {
-      const repBadge = JSON.parse(repBadgeJson);
-      setRepresentativeBadge(repBadge);
-    } else if (badges && badges.length > 0) {
-      // 대표 뱃지가 없으면 "획득한 뱃지들(badges)" 중에서 대표 뱃지를 선택
-      // userId 기반 해시로 일관된 인덱스 선택
+      try {
+        const repBadge = JSON.parse(repBadgeJson);
+        setRepresentativeBadge(repBadge);
+      } catch {
+        setRepresentativeBadge(null);
+      }
+    } else if (isOwnProfile && badges && badges.length > 0) {
       let badgeIndex = 0;
       if (userId) {
         const hash = userId.toString().split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -117,9 +123,11 @@ const UserProfileScreen = () => {
       const repFromEarned = badges[badgeIndex];
       localStorage.setItem(`representativeBadge_${userId}`, JSON.stringify(repFromEarned));
       setRepresentativeBadge(repFromEarned);
+    } else {
+      setRepresentativeBadge(null);
     }
 
-    // 해당 사용자의 게시물: localStorage + API 병합 (다른 사용자 사진도 표시)
+    // 해당 사용자의 게시물: localStorage + API
     const getPostUserId = (post) => {
       let uid = post.userId;
       if (!uid && typeof post.user === 'string') uid = post.user;
@@ -185,7 +193,7 @@ const UserProfileScreen = () => {
       setSelectedDate('');
       setAvailableDates([]);
     };
-  }, [userId, navigate]);
+  }, [userId, navigate, currentUser]);
 
   // 팔로우 / 팔로워·팔로잉 수 로드 및 followsUpdated 구독
   useEffect(() => {
@@ -198,6 +206,34 @@ const UserProfileScreen = () => {
     load();
     window.addEventListener('followsUpdated', load);
     return () => window.removeEventListener('followsUpdated', load);
+  }, [userId]);
+
+  // 신뢰지수: 해당 사용자 게시물로 계산 후, 서버 값이 있으면 덮어쓰기 (다른 사용자 프로필에서도 표시)
+  useEffect(() => {
+    if (!userId) return;
+    const score = getTrustScore(userId, userPosts.length ? userPosts : null);
+    setTrustScore(score);
+  }, [userId, userPosts]);
+
+  // 서버에서 신뢰지수/유저 정보 가져와서 덮어쓰기
+  useEffect(() => {
+    if (!userId) return;
+    const isServerId = /^[a-fA-F0-9]{24}$/.test(String(userId));
+    if (!isServerId) return;
+    api.get(`/users/${userId}`)
+      .then((res) => {
+        const serverTrust = res.data?.user?.trustScore;
+        if (typeof serverTrust === 'number') setTrustScore(serverTrust);
+        const u = res.data?.user;
+        if (u && (u.username || u.profileImage != null)) {
+          setUser((prev) => (prev ? { ...prev, ...u, id: prev.id } : null));
+          // 서버에 저장된 대표 뱃지가 있으면 우선 사용 (사용자가 설정한 대표 뱃지 노출)
+          if (u.representativeBadge) {
+            setRepresentativeBadge(u.representativeBadge);
+          }
+        }
+      })
+      .catch(() => {});
   }, [userId]);
 
   // 날짜별 필터된 게시물 (지도 + 그리드 공통) + 항상 날짜순(최신순) 정렬
@@ -362,7 +398,7 @@ const UserProfileScreen = () => {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background-light dark:bg-background-dark">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-300 dark:border-gray-600 mx-auto mb-4"></div>
           <p className="text-text-secondary-light dark:text-text-secondary-dark">로딩 중...</p>
         </div>
       </div>
@@ -409,24 +445,21 @@ const UserProfileScreen = () => {
 
               {/* 사용자 정보 */}
               <div className="flex-1 min-w-0">
-                {/* 이름 + 대표 뱃지 / 팔로우 버튼 우측 정렬 */}
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="flex items-center gap-2 min-w-0">
+                {/* 이름 + 대표 뱃지 / 팔로우 버튼 — 한 줄 */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <h2 className="text-text-primary-light dark:text-text-primary-dark text-lg font-bold truncate">
                       {user.username || '사용자'}
                     </h2>
-                    {/* 대표 뱃지: 이름 바로 옆에 표시 */}
                     {representativeBadge && (
-                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-primary/10 rounded-full">
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full flex-shrink-0">
                         <span className="text-sm">{representativeBadge.icon}</span>
-                        <span className="text-[10px] font-semibold text-primary max-w-[72px] truncate">
+                        <span className="text-[10px] font-semibold text-gray-800 dark:text-gray-200 max-w-[72px] truncate">
                           {representativeBadge.name}
                         </span>
                       </div>
                     )}
                   </div>
-
-                  {/* 팔로우 버튼: 로그인 + 다른 사용자 프로필일 때만 (우측) */}
                   {currentUser && String(currentUser.id) !== String(userId) && (
                     <button
                       onClick={() => {
@@ -453,6 +486,12 @@ const UserProfileScreen = () => {
                     </button>
                   )}
                 </div>
+                {/* 자기 소개: 이름·뱃지 하단에 한 줄로 표시 */}
+                {user?.bio && (
+                  <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark mt-1.5 line-clamp-2 break-keep w-full">
+                    {user.bio}
+                  </p>
+                )}
 
                 {/* 획득한 뱃지 개수 표시 (이름 줄 아래) */}
                 {earnedBadges.length > (representativeBadge ? 1 : 0) && (
@@ -487,11 +526,40 @@ const UserProfileScreen = () => {
             </div>
           </div>
 
+          {/* 신뢰지수 - 한 줄로 깔끔하게 (다른 사용자도 해당 사용자 게시물 기준으로 표시) */}
+          {(() => {
+            const postsForTrust = userPosts.length ? userPosts : null;
+            const { grade, nextGrade, progressToNext } = getTrustGrade(trustScore, userId || null, postsForTrust);
+            return (
+              <div className="bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 px-6 py-4">
+                <div className="flex items-center justify-between gap-2 mb-1.5 flex-nowrap min-w-0">
+                  <span className="text-sm font-semibold text-text-primary-light dark:text-text-primary-dark shrink-0">신뢰지수</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 truncate" title="활동·검증·신선도로 계산되는 Compass Score">Compass Score (신뢰 지수)</span>
+                </div>
+                <div className="flex items-center gap-2 mb-1.5 flex-nowrap min-w-0">
+                  <span className="text-2xl font-bold text-gray-800 dark:text-gray-100 shrink-0">{trustScore}</span>
+                  <span className="text-sm font-medium text-text-secondary-light dark:text-text-secondary-dark whitespace-nowrap shrink-0">{grade.icon} {grade.name}</span>
+                  {nextGrade && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">다음 등급까지 {nextGrade.minScore - trustScore}점</span>
+                  )}
+                </div>
+                {nextGrade && (
+                  <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gray-400 dark:bg-gray-500 rounded-full transition-all duration-300"
+                      style={{ width: `${progressToNext}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* 여행 지도 - 이 사용자가 다녀온 장소를 지도에 표시 (다른 사용자도 볼 수 있음) */}
           {userPosts.length > 0 && (
             <div className="bg-white dark:bg-gray-900 px-4 py-4 border-t border-gray-100 dark:border-gray-800">
               <h3 className="text-base font-bold text-text-primary-light dark:text-text-primary-dark mb-3 flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-xl">map</span>
+                <span className="material-symbols-outlined text-gray-600 dark:text-gray-400 text-xl">map</span>
                 {user.username || '사용자'}의 여행 지도
               </h3>
               {filteredUserPosts.length === 0 ? (
@@ -511,7 +579,7 @@ const UserProfileScreen = () => {
                   <div ref={mapRef} className="w-full h-48" />
                   {mapLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80">
-                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-300 dark:border-gray-600 border-t-transparent" />
                     </div>
                   )}
                 </div>
@@ -701,7 +769,7 @@ const UserProfileScreen = () => {
                   marginTop: '12px',
                   paddingTop: '12px'
                 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#00BCD4' }}>
+                  <span className="material-symbols-outlined text-gray-600 dark:text-gray-400" style={{ fontSize: '18px' }}>
                     location_on
                   </span>
                   <span style={{

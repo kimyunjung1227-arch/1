@@ -11,7 +11,9 @@ import { getRecommendedRegions, RECOMMENDATION_TYPES } from '../utils/recommenda
 import { useHorizontalDragScroll } from '../hooks/useHorizontalDragScroll';
 import './MainScreen.css';
 import { getCombinedPosts } from '../utils/mockData';
+import { fetchPostsSupabase } from '../api/postsSupabase';
 import { getDisplayImageUrl } from '../api/upload';
+import { getPostAccuracyCount } from '../utils/socialInteractions';
 
 const MainScreen = () => {
     const navigate = useNavigate();
@@ -34,17 +36,78 @@ const MainScreen = () => {
     const [selectedCity, setSelectedCity] = useState('서울 전체');
     const [selectedInterestLabels, setSelectedInterestLabels] = useState([]);
     const [deleteConfirmPlace, setDeleteConfirmPlace] = useState(null);
-    const [selectedRecommendTag, setSelectedRecommendTag] = useState('blooming');
+    const [selectedRecommendTag, setSelectedRecommendTag] = useState('active');
 
     const { handleDragStart, hasMovedRef } = useHorizontalDragScroll();
+    const videoRefs = useRef(new Map());
+    const currentlyPlayingVideo = useRef(null);
 
     const withDragCheck = useCallback((fn) => () => {
         if (!hasMovedRef.current) fn();
     }, [hasMovedRef]);
 
-    const loadMockData = useCallback(() => {
+    // Intersection Observer로 화면에 보이는 동영상만 재생
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    const video = entry.target;
+
+                    if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                        // 이전에 재생 중이던 비디오가 있으면 일시정지
+                        if (currentlyPlayingVideo.current && currentlyPlayingVideo.current !== video) {
+                            const prevVideo = currentlyPlayingVideo.current;
+                            if (prevVideo && !prevVideo.paused) {
+                                prevVideo.pause();
+                            }
+                        }
+                        // 현재 비디오 재생
+                        if (video && video.paused) {
+                            video.play().catch(() => {
+                                // 자동 재생이 차단된 경우 무시
+                            });
+                            currentlyPlayingVideo.current = video;
+                        }
+                    } else {
+                        // 화면에서 벗어나면 일시정지
+                        if (video && !video.paused) {
+                            video.pause();
+                        }
+                        if (currentlyPlayingVideo.current === video) {
+                            currentlyPlayingVideo.current = null;
+                        }
+                    }
+                });
+            },
+            {
+                threshold: [0, 0.5, 1],
+                rootMargin: '0px',
+            }
+        );
+
+        // 모든 비디오 요소 관찰
+        const videos = Array.from(videoRefs.current.values()).filter(Boolean);
+        videos.forEach((video) => {
+            observer.observe(video);
+        });
+
+        return () => {
+            videos.forEach((video) => {
+                observer.unobserve(video);
+            });
+            observer.disconnect();
+        };
+    }, [realtimeData, crowdedData, recommendedData, selectedInterest]);
+
+    const loadMockData = useCallback(async () => {
         const localPosts = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
-        const allPosts = getCombinedPosts(Array.isArray(localPosts) ? localPosts : []);
+
+        // Supabase에서 실제 게시물 불러오기 (실패 시 빈 배열)
+        const supabasePosts = await fetchPostsSupabase();
+
+        // Supabase 데이터 + 로컬 업로드 데이터 결합
+        const combined = [...supabasePosts, ...(Array.isArray(localPosts) ? localPosts : [])];
+        const allPosts = getCombinedPosts(combined);
 
         const posts = filterActivePosts48(allPosts); // 피드는 48시간 이내만 노출
 
@@ -261,17 +324,26 @@ const MainScreen = () => {
                 return 0;
             })
             .slice(0, 15); // 상위 15개 선택
-        
-        setCrowdedData(hotPosts.length > 0 ? hotPosts : transformedAll.slice(20, 35));
 
-        const recs = getRecommendedRegions(allPosts, 'blooming');
+        const crowdedWithAccuracy = (hotPosts.length > 0 ? hotPosts : transformedAll.slice(20, 35))
+            .map(p => ({ ...p, accuracyCount: getPostAccuracyCount(p.id) }));
+        setCrowdedData(crowdedWithAccuracy);
+
+        // 추천 여행지: 현재는 Supabase/로컬에서 집계한 posts 기반으로 계산
+        const recs = getRecommendedRegions(allPosts, selectedRecommendTag);
         setRecommendedData(recs.slice(0, 10));
         setAllPostsForRecommend(allPosts);
-    }, []);
+    }, [selectedRecommendTag]);
 
     const fetchPosts = useCallback(async () => {
         setLoading(true);
-        try { loadMockData(); } catch (err) { loadMockData(); } finally { setLoading(false); }
+        try {
+            await loadMockData();
+        } catch (err) {
+            logger.error('메인 피드 로딩 중 오류 (fallback로 계속 진행):', err);
+        } finally {
+            setLoading(false);
+        }
     }, [loadMockData]);
 
     const loadInterestPlaces = useCallback(() => {
@@ -336,7 +408,7 @@ const MainScreen = () => {
     }, [selectedRecommendTag, allPostsForRecommend]);
 
     return (
-        <div className="screen-layout" style={{ background: '#ffffff' }}>
+        <div className="screen-layout bg-background-light dark:bg-background-dark">
             <div
                 className="screen-content"
                 style={{
@@ -360,49 +432,142 @@ const MainScreen = () => {
                 }}>
                     <span
                         className="logo-text"
-                        style={{ fontSize: '20px', fontWeight: 900, color: '#000000', letterSpacing: '-0.5px', flexShrink: 0 }}
+                        style={{
+                            fontSize: '18px',
+                            fontWeight: 700,
+                            color: '#0f172a',
+                            opacity: 0.9,
+                            letterSpacing: '-0.3px',
+                            flexShrink: 0
+                        }}
                     >
                         Live Journey
                     </span>
+                    {/* 중앙 검색창 (예시 이미지 스타일 참고) */}
                     <button
                         type="button"
                         onClick={() => navigate('/search')}
                         style={{
                             flex: 1,
                             minWidth: 0,
-                            maxWidth: 240,
-                            height: 40,
+                            maxWidth: 260,
+                            height: 32,
+                            marginLeft: 12,
+                            marginRight: 8,
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 8,
-                            padding: '0 14px',
-                            background: 'rgba(0,0,0,0.04)',
-                            border: '1px solid rgba(0,0,0,0.06)',
-                            borderRadius: 20,
-                            color: '#64748b',
+                            justifyContent: 'space-between',
+                            padding: '0 4px',
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: '1px solid #e2e8f0',
+                            color: '#94a3b8',
                             fontSize: 14,
-                            cursor: 'pointer',
-                            textAlign: 'left'
+                            cursor: 'pointer'
                         }}
+                        aria-label="검색으로 이동"
                     >
-                        <span className="material-symbols-outlined" style={{ fontSize: 20 }}>search</span>
-                        <span>검색</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            어디로 떠나볼까요?
+                        </span>
+                        <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#94a3b8' }}>search</span>
                     </button>
-                    <button onClick={() => navigate('/notices', { state: { fromMain: true } })} className="icon-btn" style={{ minWidth: 44, minHeight: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }} aria-label="공지사항">
-                        <span className="material-symbols-outlined" style={{ fontSize: 24 }}>campaign</span>
-                    </button>
-                    <button onClick={() => navigate('/notifications')} className="icon-btn" style={{ minWidth: 44, minHeight: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }} aria-label="알림">
+                    <button
+                        onClick={() => navigate('/notifications')}
+                        className="icon-btn"
+                        style={{ minWidth: 44, minHeight: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+                        aria-label="알림"
+                    >
                         <span className="material-symbols-outlined" style={{ fontSize: 24 }}>notifications</span>
-                        {unreadNotificationCount > 0 && <span className="noti-badge" aria-label="새 알림">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}
+                        {unreadNotificationCount > 0 && (
+                            <span className="noti-badge" aria-label="새 알림">
+                                {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                            </span>
+                        )}
                     </button>
                 </div>
 
-                {/* 관심 지역/장소 — 지금 여기는 위, 가볍게 */}
-                <div style={{ padding: '8px 16px 8px', background: '#ffffff' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#64748b' }}>관심 지역</span>
-                        {interestPlaces.length === 0 && <span style={{ fontSize: '12px', color: '#94a3b8' }}>· 추가해보세요</span>}
-                    </div>
+                {/* 상단 배너 - 배포 전까지는 숨김 */}
+                {false && (() => {
+                    const BANNER_SLIDES = [
+                        { type: 'hotplace', title: '실시간 핫플 보기', subtitle: '지금 붐비는 스팟을 한눈에', icon: '🌏', bg: '#26C6DA', path: '/realtime-feed' },
+                        { type: 'event', title: '이벤트', subtitle: '참여하고 혜택 받기', icon: '🎁', bg: '#7C3AED', path: '/realtime-feed' },
+                        { type: 'magazine', title: '여행 정보 모음', subtitle: '지역별 꿀팁·가이드', icon: '📚', bg: '#059669', path: '/main' },
+                    ];
+                    const BANNER_H = 72;
+                    return (
+                        <div style={{ padding: '8px 16px 4px', background: '#ffffff' }}>
+                            <div
+                                style={{
+                                    width: '100%',
+                                    height: BANNER_H,
+                                    borderRadius: 10,
+                                    overflow: 'hidden',
+                                    position: 'relative',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        overflowX: 'auto',
+                                        overflowY: 'hidden',
+                                        scrollbarWidth: 'none',
+                                        cursor: 'grab',
+                                        scrollSnapType: 'x mandatory',
+                                        scrollBehavior: 'smooth',
+                                        WebkitOverflowScrolling: 'touch',
+                                        display: 'flex',
+                                    }}
+                                    className="hide-scrollbar"
+                                    onMouseDown={handleDragStart}
+                                >
+                                    {BANNER_SLIDES.map((banner) => (
+                                        <button
+                                            key={banner.type}
+                                            type="button"
+                                            onClick={withDragCheck(() => navigate(banner.path))}
+                                            style={{
+                                                flex: '0 0 100%',
+                                                width: '100%',
+                                                minWidth: '100%',
+                                                height: BANNER_H,
+                                                boxSizing: 'border-box',
+                                                margin: 0,
+                                                borderRadius: 0,
+                                                border: 'none',
+                                                background: banner.bg,
+                                                padding: '0 16px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: 12,
+                                                cursor: 'pointer',
+                                                scrollSnapAlign: 'start',
+                                                scrollSnapStop: 'always',
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <div style={{ width: 44, height: 44, borderRadius: 8, background: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                                                    {banner.icon}
+                                                </div>
+                                                <div style={{ textAlign: 'left' }}>
+                                                    <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 2 }}>{banner.title}</div>
+                                                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.9)' }}>{banner.subtitle}</div>
+                                                </div>
+                                            </div>
+                                            <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#fff' }}>chevron_right</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
+                {/* 관심 지역/장소 — 라벨 없이 원형 목록만 */}
+                <div style={{ padding: '4px 16px 8px', background: '#ffffff' }}>
                     <div
                         style={{ display: 'flex', gap: '10px', padding: '0 0 4px 0', overflowX: 'auto', scrollbarWidth: 'none', cursor: 'grab', scrollSnapType: 'x mandatory' }}
                         className="hide-scrollbar"
@@ -474,28 +639,39 @@ const MainScreen = () => {
                                                         position: 'absolute',
                                                         top: -4,
                                                         right: 0,
-                                                        transform: 'translate(30%, -40%)', // 조금 더 위로 / 바깥으로
-                                                        width: 24,
-                                                        height: 24,
-                                                        borderRadius: '999px', // 완전한 원형
-                                                        backgroundColor: '#ffffff',
-                                                        border: '1.5px solid #ffeded',
-                                                        color: '#ff4d4f',
+                                                        transform: 'translate(30%, -40%)',
+                                                        width: 56,
+                                                        height: 56,
+                                                        minWidth: 56,
+                                                        minHeight: 56,
+                                                        padding: 0,
+                                                        border: 'none',
+                                                        background: 'transparent',
                                                         cursor: 'pointer',
                                                         display: 'inline-flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
-                                                        fontSize: 16,
-                                                        lineHeight: 0,
-                                                        padding: 0,
-                                                        fontWeight: 700,
-                                                        boxShadow: '0 2px 5px rgba(0,0,0,0.10)',
-                                                        transition: 'transform 0.2s ease, background-color 0.2s ease',
                                                         zIndex: 2,
                                                     }}
                                                     aria-label={`${place.name} 관심 지역 삭제`}
                                                 >
-                                                    ×
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        width: 28,
+                                                        height: 28,
+                                                        borderRadius: '999px',
+                                                        backgroundColor: '#ffffff',
+                                                        border: '1px solid #ffeded',
+                                                        color: '#ff4d4f',
+                                                        fontSize: 18,
+                                                        lineHeight: 0,
+                                                        fontWeight: 700,
+                                                        boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                                                    }}>
+                                                        ×
+                                                    </span>
                                                 </button>
                                             )}
                                         </div>
@@ -516,50 +692,6 @@ const MainScreen = () => {
                                 </div>
                             );
                         })}
-                        <button
-                            type="button"
-                            onClick={withDragCheck(() => navigate('/interest-places'))}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                gap: 4,
-                                cursor: 'pointer',
-                                flexShrink: 0,
-                                border: 'none',
-                                background: 'none',
-                                minWidth: 56,
-                            }}
-                            aria-label="관심 지역 추가"
-                        >
-                            <div
-                                style={{
-                                    width: 48,
-                                    height: 48,
-                                    minWidth: 48,
-                                    minHeight: 48,
-                                    borderRadius: '50%',
-                                    border: '1px dashed rgba(148,163,184,0.8)',
-                                    position: 'relative',
-                                    background: 'transparent',
-                                    color: '#64748b',
-                                }}
-                            >
-                                <span
-                                    style={{
-                                        position: 'absolute',
-                                        top: '50%',
-                                        left: '50%',
-                                        transform: 'translate(-50%, -50%)',
-                                        fontSize: 20,
-                                        fontWeight: 600,
-                                        lineHeight: 1,
-                                    }}
-                                >
-                                    +
-                                </span>
-                            </div>
-                        </button>
                     </div>
                 </div>
 
@@ -569,23 +701,14 @@ const MainScreen = () => {
                     <div style={{ padding: '0 0 8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>지금 여기는</h2>
-                            <span
-                                style={{
-                                    fontSize: '10px',
-                                    padding: '3px 8px',
-                                    borderRadius: '999px',
-                                    fontWeight: 600,
-                                    letterSpacing: '0.14em',
-                                    textTransform: 'uppercase',
-                                    border: '1px solid rgba(248, 113, 113, 0.3)',
-                                    background: 'rgba(248, 113, 113, 0.06)',
-                                    color: '#b91c1c',
-                                }}
-                            >
-                                live
-                            </span>
                         </div>
-                        <button onClick={() => navigate('/realtime-feed')} style={{ border: 'none', background: 'none', color: '#64748b', fontSize: '14px', fontWeight: 600, cursor: 'pointer', padding: '6px 10px', minHeight: 36 }}>더보기</button>
+                        <button
+                            onClick={() => navigate('/realtime-feed')}
+                            className="border-none bg-transparent text-primary hover:text-primary-dark dark:hover:text-primary-soft text-sm font-semibold cursor-pointer py-1.5 px-2.5 min-h-[36px] flex items-center gap-1"
+                        >
+                            <span>더보기</span>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chevron_right</span>
+                        </button>
                     </div>
                     <div
                     style={{ display: 'flex', gap: '7px', padding: '0 0 12px 0', overflowX: 'auto', scrollbarWidth: 'none', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', cursor: 'grab', background: '#ffffff' }}
@@ -593,7 +716,18 @@ const MainScreen = () => {
                         onMouseDown={handleDragStart}
                     >
                         {realtimeData.map((post) => {
-                            const firstImage = getDisplayImageUrl(Array.isArray(post.images) && post.images.length > 0 ? post.images[0] : (post.image || post.thumbnail || ''));
+                            // 동영상 우선 체크: videos 배열이 있으면 첫 번째 동영상 사용
+                            let firstVideo = null;
+                            if (post.videos) {
+                                if (Array.isArray(post.videos) && post.videos.length > 0) {
+                                    firstVideo = getDisplayImageUrl(post.videos[0]);
+                                } else if (typeof post.videos === 'string' && post.videos.trim()) {
+                                    firstVideo = getDisplayImageUrl(post.videos);
+                                }
+                            }
+                            
+                            // 동영상이 없을 때만 이미지 사용
+                            const firstImage = firstVideo ? null : getDisplayImageUrl(Array.isArray(post.images) && post.images.length > 0 ? post.images[0] : (post.image || post.thumbnail || ''));
                             const weather = post.weather || null;
                             const hasWeather = weather && (weather.icon || weather.temperature);
                             return (
@@ -603,24 +737,38 @@ const MainScreen = () => {
                                     style={{
                                         minWidth: '52%',
                                         width: '52%',
-                                        borderRadius: '20px',
-                                        overflow: 'hidden',
-                                        background: 'white',
+                                        overflow: 'visible',
                                         flexShrink: 0,
                                         cursor: 'pointer',
                                         scrollSnapAlign: 'start',
-                                        scrollSnapStop: 'always',
-                                        boxShadow: 'none'
+                                        scrollSnapStop: 'always'
                                     }}
                                 >
-                                    <div style={{ width: '100%', height: '150px', background: '#e5e7eb', position: 'relative', borderRadius: '20px 20px 0 0', overflow: 'hidden' }}>
-                                        {firstImage && (
+                                    <div style={{ width: '100%', height: '200px', background: '#e5e7eb', position: 'relative', borderRadius: '14px', overflow: 'hidden', marginBottom: '4px' }}>
+                                        {firstVideo ? (
+                                            <video
+                                                ref={(el) => {
+                                                    if (el) {
+                                                        videoRefs.current.set(`realtime-${post.id}`, el);
+                                                    } else {
+                                                        videoRefs.current.delete(`realtime-${post.id}`);
+                                                    }
+                                                }}
+                                                data-video-id={`realtime-${post.id}`}
+                                                src={firstVideo}
+                                                poster={firstImage || getDisplayImageUrl(Array.isArray(post.images) && post.images.length > 0 ? post.images[0] : (post.image || post.thumbnail || '')) || undefined}
+                                                muted
+                                                loop
+                                                playsInline
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '14px' }}
+                                            />
+                                        ) : firstImage ? (
                                             <img
                                                 src={firstImage}
                                                 alt={post.location}
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '20px 20px 0 0' }}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '14px' }}
                                             />
-                                        )}
+                                        ) : null}
                                         {/* 날씨 정보만 이미지 우측 상단에 오버레이 */}
                                         {hasWeather && (
                                             <div style={{ position: 'absolute', top: '6px', right: '10px', background: 'rgba(15,23,42,0.7)', padding: '4px 8px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, color: '#f9fafb', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -629,8 +777,8 @@ const MainScreen = () => {
                                             </div>
                                         )}
                                     </div>
-                                    {/* 사진 정보 하단 시트 — 업로드 시간 우측 상단 */}
-                                    <div style={{ padding: '12px 14px 14px', background: '#f8fafc', borderTop: '3px solid #475569', boxShadow: '0 -2px 0 0 #475569, 0 2px 8px rgba(0,0,0,0.08)', minHeight: '100px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                    {/* 사진 정보 하단 — 여백만 사용, 하나의 피드 느낌 */}
+                                    <div style={{ padding: '6px 14px 10px', minHeight: '100px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexShrink: 0 }}>
                                             <div style={{ color: '#111827', fontSize: '14px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                                                 {post.location || '어딘가의 지금'}
@@ -655,8 +803,8 @@ const MainScreen = () => {
                 {/* 메인 컨텐츠 */}
                 {selectedInterest ? (
                     <div style={{ padding: '0 16px 20px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', background: '#f0f9ff', padding: '12px', borderRadius: '12px' }}>
-                            <span style={{ fontWeight: 700, color: '#0284c7', fontSize: '14px' }}>"{selectedInterest}" 모아보기</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', background: '#f0f9ff', padding: '6px 12px', borderRadius: '12px' }}>
+                            <span style={{ fontWeight: 700, color: '#0284c7', fontSize: '14px', lineHeight: 1.3 }}>"{selectedInterest}" 모아보기</span>
                             <button
                                 type="button"
                                 onClick={() => {
@@ -672,32 +820,49 @@ const MainScreen = () => {
                                     fontSize: '14px',
                                     fontWeight: 600,
                                     cursor: 'pointer',
-                                    padding: '8px 12px',
-                                    minHeight: 44,
+                                    padding: '4px 10px',
+                                    minHeight: 'auto',
+                                    lineHeight: 1.3,
                                 }}
                             >
                                 전체 보기
                             </button>
                         </div>
                         {filteredInterestPosts.length > 0 ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
                                 {filteredInterestPosts.map((post) => (
-                                    <div key={post.id} onClick={() => navigate(`/post/${post.id}`, { state: { post, allPosts: filteredInterestPosts } })} style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', cursor: 'pointer' }}>
-                                        <div style={{ height: '130px', background: '#eee', position: 'relative', overflowX: 'auto', display: 'flex', scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }} className="hide-scrollbar">
-                                            {(post.images && post.images.length > 0) ? (
-                                                post.images.map((img, i) => (
-                                                    <img key={i} src={getDisplayImageUrl(img)} alt={post.location} style={{ width: '100%', minWidth: '100%', height: '100%', objectFit: 'cover', scrollSnapAlign: 'start', scrollSnapStop: 'always' }} />
-                                                ))
+                                    <div key={post.id} onClick={() => navigate(`/post/${post.id}`, { state: { post, allPosts: filteredInterestPosts } })} style={{ overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}>
+                                        {/* 정사각형 썸네일 — 2x2 그리드 통일 */}
+                                        <div style={{ width: '100%', aspectRatio: '1', background: '#eee', position: 'relative', overflow: 'hidden', borderRadius: '12px' }}>
+                                            {(Array.isArray(post.videos) && post.videos.length > 0) ? (
+                                                <video
+                                                    ref={(el) => {
+                                                        if (el) {
+                                                            videoRefs.current.set(`interest-${post.id}`, el);
+                                                        } else {
+                                                            videoRefs.current.delete(`interest-${post.id}`);
+                                                        }
+                                                    }}
+                                                    data-video-id={`interest-${post.id}`}
+                                                    src={getDisplayImageUrl(post.videos[0])}
+                                                    poster={getDisplayImageUrl(post.images?.[0] || post.image || post.thumbnail)}
+                                                    muted
+                                                    loop
+                                                    playsInline
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '12px' }}
+                                                />
+                                            ) : (post.images && post.images.length > 0) ? (
+                                                <img src={getDisplayImageUrl(post.images[0])} alt={post.location} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '12px' }} />
                                             ) : (
-                                                <img src={getDisplayImageUrl(post.image || post.thumbnail)} alt={post.location} style={{ width: '100%', height: '100%', objectFit: 'cover', scrollSnapAlign: 'start', scrollSnapStop: 'always' }} />
+                                                <img src={getDisplayImageUrl(post.image || post.thumbnail)} alt={post.location} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '12px' }} />
                                             )}
-                                            <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(255,255,255,0.9)', padding: '4px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, color: '#333' }}>좋아요 {post.likes}</div>
+                                            <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(255,255,255,0.9)', padding: '3px 6px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, color: '#333' }}>♥ {post.likes ?? 0}</div>
                                         </div>
-                                        <div style={{ padding: '12px 14px 14px', background: '#f8fafc', borderTop: '3px solid #475569', boxShadow: '0 -2px 0 0 #475569, 0 2px 8px rgba(0,0,0,0.08)' }}>
-                                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#333', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.content || post.note || post.location}</div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#94a3b8' }}>
-                                                <span>{post.time}</span>
-                                                <span style={{ maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.location}</span>
+                                        <div style={{ padding: '8px 4px 6px' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#333', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.content || post.note || post.location || ''}</div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#94a3b8' }}>
+                                                <span>{post.time || ''}</span>
+                                                <span style={{ maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.location || ''}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -719,7 +884,13 @@ const MainScreen = () => {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 600, color: '#374151' }}>실시간 핫플</h3>
                                 </div>
-                                <button onClick={() => navigate('/crowded-place')} style={{ border: 'none', background: 'none', color: '#64748b', fontSize: '14px', fontWeight: 600, cursor: 'pointer', padding: '6px 10px', minHeight: 36 }}>더보기</button>
+                                <button
+                                    onClick={() => navigate('/crowded-place')}
+                                    className="border-none bg-transparent text-primary hover:text-primary-dark dark:hover:text-primary-soft text-sm font-semibold cursor-pointer py-1.5 px-2.5 min-h-[36px] flex items-center gap-1"
+                                >
+                                    <span>더보기</span>
+                                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chevron_right</span>
+                                </button>
                             </div>
                             {/* 가로 스크롤 슬라이더 */}
                             <div
@@ -736,40 +907,73 @@ const MainScreen = () => {
                                 className="hide-scrollbar"
                                 onMouseDown={handleDragStart}
                             >
-                                {crowdedData.map(post => (
+                                {crowdedData.map(post => {
+                                    const situationText = (post.note || post.content)
+                                        ? String(post.note || post.content).trim().replace(/\s+/g, ' ').slice(0, 28) + (String(post.note || post.content).trim().length > 28 ? '…' : '')
+                                        : (post.reasonTags && post.reasonTags[0])
+                                            ? '지금 ' + String(post.reasonTags[0]).replace(/#/g, '').replace(/_/g, ' ')
+                                            : '';
+                                    return (
                                     <div key={post.id}
                                         onClick={withDragCheck(() => navigate(`/post/${post.id}`, { state: { post, allPosts: crowdedData } }))}
                                         style={{
                                             cursor: 'pointer',
-                                            background: '#ffffff',
                                             display: 'flex',
                                             flexDirection: 'column',
                                             alignItems: 'stretch',
                                             minWidth: '32%',
                                             maxWidth: '32%',
-                                            flexShrink: 0
+                                            flexShrink: 0,
+                                            overflow: 'visible'
                                         }}
                                     >
-                                        <div style={{ width: '100%', aspectRatio: '1', borderRadius: '10px', overflow: 'hidden', background: '#eee', position: 'relative' }}>
-                                            {(Array.isArray(post.images) && post.images.length > 0) || post.image || post.thumbnail ? (
-                                                <img src={getDisplayImageUrl(post.images?.[0] || post.image || post.thumbnail)} alt={post.location} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                        <div style={{ width: '100%', aspectRatio: '1', borderRadius: '12px', overflow: 'hidden', background: '#eee', position: 'relative', marginBottom: '4px' }}>
+                                            {(Array.isArray(post.videos) && post.videos.length > 0) ? (
+                                                <video
+                                                    ref={(el) => {
+                                                        if (el) {
+                                                            videoRefs.current.set(`crowded-${post.id}`, el);
+                                                        } else {
+                                                            videoRefs.current.delete(`crowded-${post.id}`);
+                                                        }
+                                                    }}
+                                                    data-video-id={`crowded-${post.id}`}
+                                                    src={getDisplayImageUrl(post.videos[0])}
+                                                    poster={getDisplayImageUrl(post.images?.[0] || post.image || post.thumbnail)}
+                                                    muted
+                                                    loop
+                                                    playsInline
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '12px' }}
+                                                />
+                                            ) : (Array.isArray(post.images) && post.images.length > 0) || post.image || post.thumbnail ? (
+                                                <img src={getDisplayImageUrl(post.images?.[0] || post.image || post.thumbnail)} alt={post.location} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '12px' }} />
                                             ) : (
-                                                <div style={{ width: '100%', height: '100%', background: '#e5e7eb' }} />
+                                                <div style={{ width: '100%', height: '100%', background: '#e5e7eb', borderRadius: '12px' }} />
+                                            )}
+                                            {typeof post.likes === 'number' && post.likes > 0 && (
+                                                <span style={{ position: 'absolute', bottom: '6px', right: '8px', fontSize: '10px', fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', padding: '2px 6px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                                    ♥ {post.likes}
+                                                </span>
                                             )}
                                         </div>
-                                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#111827', marginTop: '4px', marginBottom: '2px', letterSpacing: '-0.3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.location}</div>
-                                        {post.categoryLabel && <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600, marginBottom: '2px' }}>{post.categoryLabel}</div>}
-                                        {post.reasonTags && post.reasonTags.length > 0 && (
-                                            <div style={{ display: 'flex', gap: '2px', flexWrap: 'wrap' }}>
-                                                {post.reasonTags.slice(0, 2).map((tag, idx) => (
-                                                    <span key={idx} style={{ fontSize: '10px', color: '#64748b', fontWeight: 500, background: '#e2e8f0', padding: '1px 4px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                                                        {tag}
-                                                    </span>
-                                                ))}
+                                        <div style={{ padding: '4px 8px 8px' }}>
+                                            {/* 지역/장소 정보 먼저 노출 */}
+                                            <div style={{ fontSize: '12px', fontWeight: 700, color: '#111827', letterSpacing: '-0.3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {post.location}
                                             </div>
-                                        )}
+                                            {/* 그 아래에 상황 설명 */}
+                                            {situationText && (
+                                                <p style={{ margin: '3px 0 0 0', fontSize: '11px', color: '#4b5563', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: '2.7em' }}>
+                                                    {situationText}
+                                                </p>
+                                            )}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                                                <span style={{ fontSize: '10px', color: '#6b7280' }}>{post.time || post.captureLabel || ''}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -778,20 +982,55 @@ const MainScreen = () => {
                             <div style={{ padding: '0 0 12px 0' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: '#374151' }}>추천 여행지</h3>
-                                    <button onClick={() => navigate('/recommended-place')} style={{ border: 'none', background: 'none', color: '#64748b', fontSize: '14px', fontWeight: 500, cursor: 'pointer', padding: '8px 12px', minHeight: 44 }}>더보기</button>
                                 </div>
                                 <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748b' }}>
                                     {RECOMMENDATION_TYPES.find(t => t.id === selectedRecommendTag)?.description}
                                 </p>
                             </div>
                             <div
-                                style={{ display: 'flex', gap: '8px', padding: '0 0 12px 0', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', cursor: 'grab', scrollSnapType: 'x mandatory' }}
+                                style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    padding: '0 0 12px 0',
+                                    overflowX: 'auto',
+                                    scrollbarWidth: 'none',
+                                    WebkitOverflowScrolling: 'touch',
+                                    cursor: 'grab',
+                                    scrollSnapType: 'x mandatory',
+                                }}
                                 className="hide-scrollbar"
                                 onMouseDown={handleDragStart}
                             >
-                                {RECOMMENDATION_TYPES.map(tag => (
-                                    <div key={tag.id} onClick={withDragCheck(() => setSelectedRecommendTag(tag.id))} style={{ background: selectedRecommendTag === tag.id ? '#00BCD4' : '#f1f5f9', color: selectedRecommendTag === tag.id ? 'white' : '#64748b', padding: '12px 20px', borderRadius: '25px', fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', border: selectedRecommendTag === tag.id ? 'none' : '1px solid #e2e8f0', flexShrink: 0, transition: 'all 0.2s', scrollSnapAlign: 'start', minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>{tag.name}</div>
-                                ))}
+                                {RECOMMENDATION_TYPES.map((tag) => {
+                                    const isActive = selectedRecommendTag === tag.id;
+                                    return (
+                                        <button
+                                            key={tag.id}
+                                            type="button"
+                                            onClick={withDragCheck(() => setSelectedRecommendTag(tag.id))}
+                                            style={{
+                                                flexShrink: 0,
+                                                scrollSnapAlign: 'start',
+                                                padding: '6px 12px',
+                                                borderRadius: 999,
+                                                border: isActive ? '1px solid #26C6DA' : '1px solid #e2e8f0',
+                                                backgroundColor: isActive ? 'rgba(38,198,218,0.08)' : '#ffffff',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: 4,
+                                                fontSize: 12,
+                                                fontWeight: isActive ? 700 : 500,
+                                                color: isActive ? '#0f172a' : '#64748b',
+                                                whiteSpace: 'nowrap',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.18s ease-out',
+                                            }}
+                                        >
+                                            <span>{tag.name}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                             <div
                                 style={{ display: 'flex', gap: '10px', padding: '0 0 16px 0', overflowX: 'auto', scrollbarWidth: 'none', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', cursor: 'grab' }}
@@ -815,20 +1054,22 @@ const MainScreen = () => {
                                         <div
                                             key={idx}
                                             onClick={withDragCheck(() => navigate(`/region/${item.regionName}`))}
-                                            style={{ minWidth: '74%', width: '74%', borderRadius: '18px', overflow: 'hidden', background: 'white', flexShrink: 0, cursor: 'pointer', scrollSnapAlign: 'center', scrollSnapStop: 'always', boxShadow: 'none' }}
+                                            style={{ minWidth: '74%', width: '74%', overflow: 'visible', flexShrink: 0, cursor: 'pointer', scrollSnapAlign: 'center', scrollSnapStop: 'always' }}
                                         >
-                                            <div style={{ width: '100%', height: '160px', display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', background: '#e5e7eb' }} className="hide-scrollbar">
-                                                {(displayImages.length ? displayImages : [mainSrc]).map((src, i) => (
-                                                    <img
-                                                        key={i}
-                                                        src={src}
-                                                        alt={item.title}
-                                                        style={{ width: '100%', minWidth: '100%', height: '100%', objectFit: 'cover', scrollSnapAlign: 'start' }}
-                                                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1548115184-bc65ae4986cf?w=800&q=80'; }}
-                                                    />
-                                                ))}
+                                            <div style={{ width: '100%', height: '200px', display: 'flex', overflow: 'hidden', borderRadius: '14px', marginBottom: '4px', background: '#e5e7eb' }}>
+                                                <div style={{ flex: 1, overflowX: 'auto', display: 'flex', scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }} className="hide-scrollbar">
+                                                    {(displayImages.length ? displayImages : [mainSrc]).map((src, i) => (
+                                                        <img
+                                                            key={i}
+                                                            src={src}
+                                                            alt={item.title}
+                                                            style={{ width: '100%', minWidth: '100%', height: '100%', objectFit: 'cover', scrollSnapAlign: 'start', borderRadius: '14px' }}
+                                                            onError={(e) => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1548115184-bc65ae4986cf?w=800&q=80'; }}
+                                                        />
+                                                    ))}
+                                                </div>
                                             </div>
-                                            <div style={{ padding: '12px 14px 14px', background: '#f8fafc', borderTop: '3px solid #475569', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                                            <div style={{ padding: '6px 14px 10px' }}>
                                                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#06b6d4', marginBottom: '3px' }}>추천</div>
                                                 <div style={{ color: '#111827', fontSize: '14px', fontWeight: 800, marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     {item.title}

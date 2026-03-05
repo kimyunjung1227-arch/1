@@ -502,7 +502,7 @@ const MapScreen = () => {
   const [sheetHeight, setSheetHeight] = useState(200); // 시트의 실제 높이
   const [selectedPost, setSelectedPost] = useState(null); // 선택된 게시물 (상세화면용)
   const [selectedPinId, setSelectedPinId] = useState(null); // 지도/시트에서 선택된 핀 ID (강조 표시용)
-  const [pinDetailView, setPinDetailView] = useState(null); // 핀 클릭 시 보여줄 간단한 상세 카드 { post }
+  const [pinDetailView, setPinDetailView] = useState(null); // 지도 핀 또는 하단 시트 선택 시 보여줄 설명 카드 { post } (통일)
   const [showSOSModal, setShowSOSModal] = useState(false); // 도움 요청 모달 표시 여부
   const [selectedSOSLocation, setSelectedSOSLocation] = useState(null); // 선택된 도움 요청 위치
   const [sosQuestion, setSosQuestion] = useState(''); // 궁금한 내용
@@ -647,7 +647,7 @@ const MapScreen = () => {
           position: relative;
           width: 24px;
           height: 24px;
-          background: #00BCD4;
+          background: #26C6DA;
           border: 3px solid white;
           border-radius: 50%;
           box-shadow: 0 2px 6px rgba(0,0,0,0.3);
@@ -1418,7 +1418,7 @@ const MapScreen = () => {
         const isSelected = routePins.some(p => p.post.id === post.id);
         const isHighlighted = highlightedPinId && post.id === highlightedPinId;
         const useHighlight = isSelected || isHighlighted;
-        const borderColor = useHighlight ? '#00BCD4' : 'white';
+        const borderColor = useHighlight ? '#26C6DA' : 'white';
         const borderWidth = useHighlight ? '3px' : '2px';
         const boxShadow = useHighlight
           ? '0 2px 8px rgba(0, 188, 212, 0.35)'
@@ -1466,7 +1466,7 @@ const MapScreen = () => {
               right: -6px;
               width: 20px;
               height: 20px;
-              background: #00BCD4;
+              background: #26C6DA;
               border-radius: 50%;
               border: 2px solid white;
               display: flex;
@@ -2247,7 +2247,7 @@ const MapScreen = () => {
     setIsRouteMode(newMode);
 
     if (newMode) {
-      // 경로 모드 진입 시 상세 모달·간단 카드·선택 강조 닫기
+      // 경로 모드 진입 시 상세 모달·설명 카드·선택 강조 닫기
       setSelectedPost(null);
       setPinDetailView(null);
       setSelectedPinId(null);
@@ -3295,12 +3295,11 @@ const MapScreen = () => {
           </div>
         )}
 
-        {/* 지도 컨트롤 버튼들 - 경로 모드일 때는 숨김 */}
+        {/* 지도 컨트롤 - 내 위치 버튼만 (줌 +/- 제거) */}
         {!isRouteMode && (
           <div style={{
             position: 'absolute',
             right: '16px',
-            // 네비게이션바 제거 → 68px 보정값 삭제, 시트 바로 위에 위치
             bottom: isSheetHidden ? '120px' : `${sheetHeight + 16}px`,
             display: 'flex',
             flexDirection: 'column',
@@ -3309,44 +3308,6 @@ const MapScreen = () => {
             transition: 'all 0.3s ease-out',
             pointerEvents: 'auto'
           }}>
-            <button
-              onClick={handleZoomIn}
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '20px',
-                border: 'none',
-                background: 'white',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer'
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#333' }}>
-                add
-              </span>
-            </button>
-            <button
-              onClick={handleZoomOut}
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '20px',
-                border: 'none',
-                background: 'white',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer'
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#333' }}>
-                remove
-              </span>
-            </button>
             <button
               onClick={handleCenterLocation}
               style={{
@@ -3498,10 +3459,10 @@ const MapScreen = () => {
                     className="pin-card"
                     onClick={() => {
                       if (pinHasMovedRef.current) return;
-                      // 지도 확대/축소/위치 상태는 그대로 두고,
-                      // 하단 시트에서 누른 핀만 선택·강조
-                      setPinDetailView(null);
+                      // 지도/시트 통일: 같은 설명 카드(pinDetailView)로 표시
+                      const alreadySelected = selectedPinId === pin.id && pinDetailView?.post?.id === pin.post?.id;
                       setSelectedPinId(pin.id);
+                      setPinDetailView(alreadySelected ? null : { post: pin.post });
                     }}
                     style={{
                       minWidth: '90px',
@@ -3578,17 +3539,17 @@ const MapScreen = () => {
           </div>
         )}
 
-        {/* 핀 클릭 시 간단한 상세 카드 (지도 위·시트 위) */}
+        {/* 핀/시트 선택 시 설명 카드 — 사진처럼 화면 가운데, 경로 만들기 버튼 위 */}
         {pinDetailView && pinDetailView.post && !selectedPost && (
           <div
             style={{
               position: 'absolute',
               left: '50%',
               transform: 'translateX(-50%)',
-              bottom: isSheetHidden ? 120 : sheetHeight + 88,
+              bottom: `calc(${isSheetHidden ? 100 : Math.max(sheetHeight + 20, 100)}px + 68px)`,
               width: 'calc(100% - 32px)',
               maxWidth: 340,
-              zIndex: 100,
+              zIndex: 200,
               background: 'white',
               borderRadius: '16px',
               boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
@@ -3599,7 +3560,7 @@ const MapScreen = () => {
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: 12 }}>
               <img
-                src={getDisplayImageUrl(pinDetailView.post.images?.[0] ?? pinDetailView.post.thumbnail ?? pinDetailView.post.image)}
+                src={getDisplayImageUrl(pinDetailView.post.images?.[0] ?? pinDetailView.post.thumbnail ?? pinDetailView.post.image ?? pinDetailView.post.imageUrl)}
                 alt=""
                 style={{ width: 72, height: 72, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
                 onError={(e) => { e.target.style.display = 'none'; }}
@@ -3608,10 +3569,12 @@ const MapScreen = () => {
                 <p style={{ margin: 0, fontSize: 15, fontWeight: 'bold', color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {pinDetailView.post.placeName || pinDetailView.post.detailedLocation || pinDetailView.post.location || '여행지'}
                 </p>
-                {pinDetailView.post.note && (
-                  <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#666', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {(pinDetailView.post.note && pinDetailView.post.note.trim()) ? (
+                  <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#666', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {pinDetailView.post.note}
                   </p>
+                ) : (
+                  <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#999' }}>설명이 없습니다</p>
                 )}
               </div>
               <button

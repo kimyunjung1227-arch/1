@@ -8,10 +8,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Live Blue (메인 키 컬러)
-        "primary": "#00BCD4",           // Live Blue - 신뢰, 실시간, 스마트
-        "primary-dark": "#0097A7",      // Hover/Active 용 약간 더 딥한 블루
-        "primary-soft": "#E0F7FA",      // 배경/하이라이트용 소프트 블루
+        // Live Blue (메인 키 컬러) — 조금 더 연한 톤으로 조정
+        "primary": "#26C6DA",           // Live Blue - 활성 탭, CTA, 링크 (기존 #00BCD4 보다 살짝 연한 톤)
+        "primary-dark": "#00BCD4",      // Hover/Active (이전 메인 컬러를 다크 톤으로 사용)
+        "primary-soft": "#E0F7FA",      // 기존 소프트 블루 유지
+        "primary-5": "rgba(38, 198, 218, 0.05)",   // 배경용 5% 톤
+        "primary-10": "rgba(38, 198, 218, 0.1)",   // 호버 등 아주 연한 강조
 
         // Journey Yellow (보조/CTA 컬러)
         "accent": "#FFC107",            // Journey Yellow - 즐거움, 설렘, CTA

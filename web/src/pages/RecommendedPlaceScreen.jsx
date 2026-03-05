@@ -27,7 +27,7 @@ const RecommendedPlaceScreen = () => {
   }, [loadData]);
 
   return (
-    <div className="screen-layout" style={{ background: '#fafafa', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="screen-layout bg-background-light dark:bg-background-dark min-h-screen flex flex-col">
       {/* 헤더 */}
       <header className="screen-header" style={{
         display: 'flex',

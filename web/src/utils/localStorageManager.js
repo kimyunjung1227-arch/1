@@ -79,6 +79,33 @@ export const limitPostsCount = (maxCount = 100) => {
   }
 };
 
+// 과거에 사용하던 목업 데이터 정리용 함수들
+// 현재는 실제 사용자 데이터만 사용하지만,
+// safeSetItem 내부에서 호출하므로 안전하게 no-op 수준으로 구현
+export const cleanOldMockData = () => {
+  try {
+    // 예전에 사용했을 가능성이 있는 키들 정리
+    localStorage.removeItem('MOCK_POSTS');
+    localStorage.removeItem('mockPosts');
+    return true;
+  } catch (error) {
+    logger.error('Mock 데이터 정리 실패:', error);
+    return false;
+  }
+};
+
+export const clearAllMockData = () => {
+  try {
+    localStorage.removeItem('MOCK_POSTS');
+    localStorage.removeItem('mockPosts');
+    logger.log('🗑️ 모든 Mock 데이터 삭제 완료');
+    return { success: true };
+  } catch (error) {
+    logger.error('Mock 데이터 삭제 실패:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // localStorage에 안전하게 저장 (용량 초과 시 자동 정리)
 export const safeSetItem = (key, value) => {
   try {

@@ -167,6 +167,24 @@ export const filterRecentPosts = (posts, maxDays = 2, maxHours = null) => {
 // 48시간 이내 게시물만 노출 (피드/검색/추천용 공통)
 export const filterActivePosts48 = (posts) => filterRecentPosts(posts, 2, 48);
 
+/**
+ * 업로드 후 30분 이내인지 여부 (LIVE 뱃지 표시용)
+ * @param {Date|string|number} timestamp - 업로드 시각
+ * @param {number} maxMinutes - 기준 분 (기본 30분)
+ * @returns {boolean}
+ */
+export const isPostLive = (timestamp, maxMinutes = 30) => {
+  if (!timestamp) return false;
+  try {
+    const postTime = new Date(timestamp).getTime();
+    if (isNaN(postTime)) return false;
+    const diffMs = Date.now() - postTime;
+    return diffMs >= 0 && diffMs < maxMinutes * 60 * 1000;
+  } catch {
+    return false;
+  }
+};
+
 // 게시물 나이(시간) 계산 (시간 단위)
 export const getPostAgeInHours = (timestamp) => {
   if (!timestamp) return 0;
@@ -184,6 +202,7 @@ export default {
   sortByTime,
   isOlderThanTwoDays,
   filterRecentPosts,
-  getPostAgeInHours
+  getPostAgeInHours,
+  isPostLive
 };
 

@@ -10,6 +10,7 @@ import { checkNewBadges, awardBadge, hasSeenBadge, markBadgeAsSeen, calculateUse
 import { checkAndNotifyInterestPlace } from '../utils/interestPlaces';
 import { analyzeImageForTags } from '../utils/aiImageAnalyzer';
 import { getWeatherByRegion } from '../api/weather';
+import { createPostSupabase } from '../api/postsSupabase';
 import { getCurrentTimestamp, getTimeAgo } from '../utils/timeUtils';
 import { getBadgeCongratulationMessage, getBadgeDifficultyEffects } from '../utils/badgeMessages';
 import { logger } from '../utils/logger';
@@ -23,6 +24,8 @@ const UploadScreen = () => {
   const { handleDragStart } = useHorizontalDragScroll();
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showUploadGuide, setShowUploadGuide] = useState(false);
+  const [dontShowGuideAgain, setDontShowGuideAgain] = useState(false);
   const [formData, setFormData] = useState({
     images: [],
     imageFiles: [],
@@ -117,6 +120,31 @@ const UploadScreen = () => {
   const [showBadgeModal, setShowBadgeModal] = useState(false);
   const [earnedBadge, setEarnedBadge] = useState(null);
   const reanalysisTimerRef = useRef(null);
+
+  // 업로드 가이드는 한 번 보고 나면 5번 업로드 동안은 다시 나오지 않도록 제어
+  useEffect(() => {
+    try {
+      const neverShow = localStorage.getItem('uploadGuideNeverShow');
+      if (neverShow === '1') {
+        setShowUploadGuide(false);
+        return;
+      }
+
+      const raw = localStorage.getItem('uploadGuideSeenCount');
+      const count = raw ? parseInt(raw, 10) : 0;
+      // 0, 6, 12... 번째 진입에서만 보여주기 위해 6으로 나눈 나머지 확인
+      if (Number.isNaN(count) || count % 6 === 0) {
+        setShowUploadGuide(true);
+        const next = Number.isNaN(count) ? 1 : count + 1;
+        localStorage.setItem('uploadGuideSeenCount', String(next));
+      } else {
+        setShowUploadGuide(false);
+      }
+    } catch (e) {
+      logger.warn('업로드 가이드 카운트 처리 중 오류 (무시):', e);
+      setShowUploadGuide(true);
+    }
+  }, [logger]);
 
   const getCurrentLocation = useCallback(async () => {
     if (!navigator.geolocation) return;
@@ -668,25 +696,6 @@ const UploadScreen = () => {
       return;
     }
 
-    // 촬영 시점 제약: 당일(24시간 이내)에 촬영된 사진만 업로드 허용
-    if (formData.images.length > 0) {
-      const now = Date.now();
-      const photoTs = formData.photoDate
-        ? new Date(formData.photoDate).getTime()
-        : (formData.exifData?.photoTimestamp ?? null);
-
-      if (!photoTs || Number.isNaN(photoTs)) {
-        alert('촬영일 정보가 없는 사진은 업로드할 수 없어요.\n당일(24시간 이내)에 촬영한 사진만 올려주세요.');
-        return;
-      }
-
-      const diffHours = (now - photoTs) / (1000 * 60 * 60);
-      if (diffHours > 24) {
-        alert('당일(24시간 이내)에 촬영된 사진만 업로드할 수 있어요.\n다른 사진을 선택해주세요.');
-        return;
-      }
-    }
-
     logger.log('Validation passed - proceeding with upload');
 
     try {
@@ -778,17 +787,15 @@ const UploadScreen = () => {
 
       setUploadProgress(80);
 
-      try {
-        const result = await createPost(postData);
+      // 더 이상 백엔드 REST API(createPost)는 호출하지 않고,
+      // Supabase + localStorage 기준으로만 저장합니다.
 
-        if (result.success) {
-          // 백엔드 업로드 성공 시에도 localStorage에 저장 (뱃지 시스템을 위해)
-          const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-          const currentUser = user || savedUser;
-          const username = currentUser?.username || currentUser?.email?.split('@')[0] || '모사모';
-          const currentUserId = currentUser?.id || savedUser?.id || 'test_user_001';
+      const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const currentUser = user || savedUser;
+      const username = currentUser?.username || currentUser?.email?.split('@')[0] || '모사모';
+      const currentUserId = currentUser?.id || savedUser?.id || 'test_user_001';
 
-          const backendPost = result.post || result.data;
+      const backendPost = null;
 
           // 이미지 URL 확인 및 설정
           const finalImages = uploadedImageUrls.length > 0
@@ -911,6 +918,17 @@ const UploadScreen = () => {
             });
           }
 
+          // Supabase에도 게시물 메타데이터 저장 (실패해도 앱 동작에는 영향 없도록 처리)
+          createPostSupabase(sanitizedPost).then((result) => {
+            if (!result?.success) {
+              logger.warn('Supabase 게시물 저장 실패 (무시 가능):', result?.error);
+            } else {
+              logger.log('✅ Supabase 게시물 저장 완료:', { supabasePostId: result.post?.id });
+            }
+          }).catch((err) => {
+            logger.warn('Supabase 게시물 저장 중 예외 (무시):', err);
+          });
+
           setUploadProgress(100);
           setShowSuccessModal(true);
 
@@ -984,184 +1002,7 @@ const UploadScreen = () => {
             }
           }, 1000); // 500ms -> 1000ms로 증가하여 데이터 저장 완료 대기
         }
-      } catch (postError) {
-        logger.warn('Backend API failed - using localStorage');
-
-        const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-        const currentUser = user || savedUser;
-        const username = currentUser?.username || currentUser?.email?.split('@')[0] || '모사모';
-        const currentUserId = currentUser?.id || savedUser?.id || 'test_user_001';
-
-        logger.log('📸 게시물 저장 정보:', {
-          userId: currentUserId,
-          username: username,
-          images: uploadedImageUrls.length > 0 ? uploadedImageUrls.length : formData.images.length,
-          location: formData.location
-        });
-
-        // 이미지 URL 확인 및 설정
-        const finalImages = uploadedImageUrls.length > 0
-          ? uploadedImageUrls
-          : (formData.images && formData.images.length > 0 ? formData.images : []);
-        const finalVideos = uploadedVideoUrls.length > 0
-          ? uploadedVideoUrls
-          : (formData.videos && formData.videos.length > 0 ? formData.videos : []);
-
-        logger.log('📸 최종 이미지/동영상:', {
-          images: finalImages.length,
-          videos: finalVideos.length,
-          imageUrls: finalImages,
-          videoUrls: finalVideos
-        });
-
-        if (finalImages.length === 0 && finalVideos.length === 0) {
-          logger.error('❌ 이미지 또는 동영상이 없습니다!');
-          alert('이미지 또는 동영상을 추가해주세요');
-          setUploading(false);
-          setUploadProgress(0);
-          return;
-        }
-
-        // 지역 정보 추출 (첫 번째 단어를 지역으로 사용)
-        const region = formData.location?.split(' ')[0] || '기타';
-
-        // EXIF에서 추출한 촬영 날짜 사용 (없으면 현재 시간)
-        const photoTimestamp = formData.photoDate
-          ? new Date(formData.photoDate).getTime()
-          : Date.now();
-
-        // 업로드 시점의 날씨 정보 가져오기
-        let weatherAtUpload = null;
-        try {
-          const weatherResult = await getWeatherByRegion(region);
-          if (weatherResult?.success && weatherResult.weather) {
-            weatherAtUpload = {
-              icon: weatherResult.weather.icon,
-              condition: weatherResult.weather.condition,
-              temperature: weatherResult.weather.temperature,
-              fetchedAt: Date.now() // 날씨 정보를 가져온 시점
-            };
-          }
-        } catch (weatherError) {
-          logger.warn('업로드 시 날씨 정보 가져오기 실패 (무시):', weatherError);
-        }
-
-        // localStorage에 이미지/동영상 URL 저장 (서버 URL 또는 blob URL)
-        const uploadedPost = {
-          id: `local-${Date.now()}`,
-          userId: currentUserId,
-          images: finalImages,
-          videos: finalVideos,
-          imageCount: finalImages.length,
-          videoCount: finalVideos.length,
-          location: formData.location,
-          tags: formData.tags,
-          note: formData.note,
-          timestamp: photoTimestamp,
-          createdAt: getCurrentTimestamp(),
-          photoDate: formData.photoDate || null, // EXIF에서 추출한 촬영 날짜
-          timeLabel: getTimeAgo(new Date(photoTimestamp)),
-          user: username,
-          likes: 0,
-          isNew: true,
-          isLocal: true,
-          category: aiCategory,
-          categoryName: aiCategoryName,
-          coordinates: formData.coordinates || (formData.exifData?.gpsCoordinates ? {
-            lat: formData.exifData.gpsCoordinates.lat,
-            lng: formData.exifData.gpsCoordinates.lng
-          } : null),
-          detailedLocation: formData.verifiedLocation || formData.location,
-          placeName: formData.location,
-          region: region, // 지역 정보 추가
-          weather: weatherAtUpload, // 업로드 시점의 날씨 정보 저장
-          exifData: formData.exifData ? {
-            photoDate: formData.exifData.photoDate,
-            gpsCoordinates: formData.exifData.gpsCoordinates,
-            cameraMake: formData.exifData.cameraMake,
-            cameraModel: formData.exifData.cameraModel
-          } : null, // EXIF 메타데이터 (신뢰할 수 있는 정보)
-          verifiedLocation: formData.verifiedLocation || null // EXIF에서 검증된 위치
-        };
-
-        logLocalStorageStatus();
-
-        const existingPosts = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
-        const updatedPosts = [uploadedPost, ...existingPosts];
-        const saveResult = safeSetItem('uploadedPosts', JSON.stringify(updatedPosts));
-
-        if (!saveResult.success) {
-          logger.error('localStorage save failed:', saveResult.message);
-          throw new Error(saveResult.message || 'localStorage save failed');
-        }
-
-        logger.log('✅ 게시물 저장 완료:', {
-          저장된게시물수: updatedPosts.length,
-          새게시물ID: uploadedPost.id,
-          새게시물userId: uploadedPost.userId
-        });
-
-        // 게시물 업데이트 이벤트 발생 (뱃지 진행률 업데이트를 위해)
-        // localStorage 저장 후 이벤트 발생
-        setTimeout(() => {
-          logger.log('📢 게시물 업데이트 이벤트 발생 (localStorage)');
-          window.dispatchEvent(new Event('newPostsAdded'));
-          window.dispatchEvent(new Event('postsUpdated'));
-          logger.log('✅ 이벤트 전송 완료');
-        }, 100); // 50ms -> 100ms로 증가하여 저장 완료 대기
-
-        setUploadProgress(100);
-        setShowSuccessModal(true);
-
-        logger.log('Upload success! Checking badges & titles...');
-
-        // 관심 지역/장소 알림 발송
-        setTimeout(async () => {
-          logger.log('🔔 관심 지역/장소 알림 체크 중...');
-          await checkAndNotifyInterestPlace(uploadedPost);
-        }, 200);
-
-        // 데이터 저장 완료 후 뱃지 체크 (더 긴 지연 시간)
-        setTimeout(() => {
-          logger.debug('Badge check timer running');
-
-          // localStorage 저장 확인
-          const verifyPosts = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
-          const verifyPost = verifyPosts.find(p => p.id === uploadedPost.id);
-          logger.debug('🔍 저장 확인:', {
-            저장된게시물수: verifyPosts.length,
-            새게시물존재: !!verifyPost,
-            새게시물이미지: verifyPost?.images?.length || 0
-          });
-
-          logger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          logger.log('🏆 뱃지 체크 시작');
-          const earnedBadge = checkAndAwardBadge();
-          logger.debug('Badge earned result:', earnedBadge);
-          logger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-          // 뱃지 진행률 업데이트 이벤트 발생
-          window.dispatchEvent(new Event('badgeProgressUpdated'));
-
-          if (earnedBadge) {
-            logger.log('Badge or Title earned! Showing modal...');
-            setShowBadgeModal(true);
-            // 뱃지 모달 표시 후 3초 뒤 메인으로 이동
-            setTimeout(() => {
-              setShowSuccessModal(false);
-              setShowBadgeModal(false);
-              navigate('/main');
-            }, 3000);
-          } else {
-            logger.debug('Navigate to main in 2 seconds...');
-            setTimeout(() => {
-              setShowSuccessModal(false);
-              navigate('/main');
-            }, 2000);
-          }
-        }, 500);
-      }
-    } catch (error) {
+    catch (error) {
       logger.error('Upload failed:', error);
       alert('업로드에 실패했습니다. 다시 시도해주세요');
     } finally {
@@ -1172,6 +1013,142 @@ const UploadScreen = () => {
 
   return (
     <>
+      {/* 업로드 가이드 팝업 */}
+      {showUploadGuide && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center px-4"
+          style={{ backgroundColor: 'rgba(15,23,42,0.45)' }}
+          onClick={() => {
+            if (dontShowGuideAgain) {
+              localStorage.setItem('uploadGuideNeverShow', '1');
+            }
+            setShowUploadGuide(false);
+          }}
+        >
+          <div
+            className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            style={{ maxHeight: '90vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white">
+                  업로드 가이드
+                </h2>
+                <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                  이렇게 올려주시면 다른 여행자에게 가장 도움이 돼요
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (dontShowGuideAgain) {
+                    localStorage.setItem('uploadGuideNeverShow', '1');
+                  }
+                  setShowUploadGuide(false);
+                }}
+                className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+
+            <div className="px-5 py-3 space-y-3 overflow-y-auto text-left">
+              {/* 무보정 원본 */}
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/70 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">
+                    무보정 원본
+                  </p>
+                  <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold">
+                    필터는 잠시 넣어두세요
+                  </span>
+                </div>
+                <p className="text-[11px] leading-snug text-gray-600 dark:text-gray-300">
+                  실제 색감이 다른 여행자의 선택을 돕습니다. 보정 없는 리얼함이 라이브저니의 힘입니다.
+                </p>
+              </div>
+
+              {/* 현장 밀도 */}
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/70 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">
+                    현장 밀도
+                  </p>
+                  <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold">
+                    풍경과 인파를 함께
+                  </span>
+                </div>
+                <p className="text-[11px] leading-snug text-gray-600 dark:text-gray-300">
+                  예쁜 풍경만 찍기보다 지금 사람들이 얼마나 있는지 슬쩍 보여주세요. 혼잡도가 가장 궁금한 정보니까요!
+                </p>
+              </div>
+
+              {/* 팩트 체크 */}
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/70 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">
+                    팩트 체크
+                  </p>
+                  <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold">
+                    디테일을 포착하세요
+                  </span>
+                </div>
+                <p className="text-[11px] leading-snug text-gray-600 dark:text-gray-300">
+                  주변의 온도계 전광판, 현재 줄 서 있는 모습, 안내 표지판 등 팩트를 보여주는 사진이 가장 좋습니다.
+                </p>
+              </div>
+
+              {/* 오늘의 착장 */}
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/70 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">
+                    오늘의 착장
+                  </p>
+                  <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold">
+                    OOTD가 곧 날씨 정보
+                  </span>
+                </div>
+                <p className="text-[11px] leading-snug text-gray-600 dark:text-gray-300">
+                  지금 입고 계신 옷차림이 잘 보이는 사진인가요? &quot;지금 이 옷이면 충분해!&quot;라는 확신을 줄 수 있으면
+                  최고예요.
+                </p>
+              </div>
+
+              {/* 다시 보지 않기 */}
+              <div className="mt-2 flex items-center gap-2 px-1">
+                <input
+                  id="upload-guide-dont-show"
+                  type="checkbox"
+                  checked={dontShowGuideAgain}
+                  onChange={(e) => setDontShowGuideAgain(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <label
+                  htmlFor="upload-guide-dont-show"
+                  className="text-[11px] text-gray-500 dark:text-gray-400 select-none"
+                >
+                  이 기기에서 다시 보지 않기
+                </label>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (dontShowGuideAgain) {
+                  localStorage.setItem('uploadGuideNeverShow', '1');
+                }
+                setShowUploadGuide(false);
+              }}
+              className="w-full py-3.5 text-sm font-semibold text-primary hover:bg-primary/5 border-t border-gray-100 dark:border-gray-800 transition-colors"
+            >
+              알겠어요
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="phone-screen" style={{
         background: '#ffffff',
         borderRadius: '32px',
@@ -1214,7 +1191,7 @@ const UploadScreen = () => {
               color: '#00BCD4',
               fontFamily: "'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
               marginBottom: '2px'
-            }}>나의 여행 기록</h1>
+            }}>지금 현장 상황</h1>
             <p className="text-xs text-gray-500" style={{ fontSize: '12px' }}>
               {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}
             </p>
@@ -1234,9 +1211,23 @@ const UploadScreen = () => {
           minHeight: 0
         }}>
           <div className="pt-4 space-y-5">
+            {/* 사진 / 동영상 + 업로드 가이드 버튼 한 줄 */}
+            <div className="flex items-center justify-between px-1 mb-1">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                사진 / 동영상
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowUploadGuide(true)}
+                className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2.5 py-1 text-[11px] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[14px]">info</span>
+                <span>업로드 가이드</span>
+              </button>
+            </div>
+
             {/* 사진 / 동영상 선택 — 단일 큰 박스 */}
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 px-1">사진 / 동영상</h3>
 
               {(formData.images.length === 0 && formData.videos.length === 0) ? (
                 <button
@@ -1281,27 +1272,27 @@ const UploadScreen = () => {
                     onMouseDown={(e) => { if (!e.target.closest('button')) handleDragStart(e); }}
                   >
                     {formData.images.map((image, index) => (
-                    <div
+                      <div
                         key={`img-row-${index}`}
-                        className="relative flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100"
-                    >
+                        className="relative flex-shrink-0 w-24 h-24 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100"
+                      >
                         <img src={image} alt="" className="w-full h-full object-cover" />
                         <button
-                        type="button"
-                        onClick={(e) => {
+                          type="button"
+                          onClick={(e) => {
                             e.stopPropagation();
                             setFormData(prev => ({
-                            ...prev,
-                            images: prev.images.filter((_, i) => i !== index),
-                            imageFiles: prev.imageFiles.filter((_, i) => i !== index)
+                              ...prev,
+                              images: prev.images.filter((_, i) => i !== index),
+                              imageFiles: prev.imageFiles.filter((_, i) => i !== index)
                             }));
-                        }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-white text-gray-800 border border-gray-300 shadow-md flex items-center justify-center text-xs font-bold hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors"
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          className="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/45 text-white flex items-center justify-center text-sm font-semibold shadow-md backdrop-blur-sm"
                         >
-                        ×
+                          ×
                         </button>
-                    </div>
+                      </div>
                     ))}
 
                     {formData.videos.map((video, index) => (
@@ -1443,7 +1434,7 @@ const UploadScreen = () => {
                       <button
                         key={tag}
                         onClick={() => addAutoTag(tag)}
-                        className="rounded-full bg-primary-soft hover:bg-primary/10 border border-primary-soft hover:border-primary py-1 px-2.5 text-xs font-medium text-primary transition-all"
+                        className="rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-primary py-1 px-2 text-[11px] font-medium text-gray-700 transition-all"
                       >
                         {tag}
                       </button>
@@ -1459,12 +1450,12 @@ const UploadScreen = () => {
                     {formData.tags.map((tag) => (
                       <div
                         key={tag}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft border border-primary/20 py-2 px-4 min-h-[40px] text-sm text-primary font-semibold leading-tight"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 border border-gray-200 py-1.5 px-3 min-h-[32px] text-xs text-gray-800 font-medium leading-tight"
                       >
                         <span>{tag}</span>
                         <button
                           onClick={() => removeTag(tag)}
-                          className="flex items-center justify-center text-primary hover:text-primary-dark hover:bg-primary/20 rounded-full w-6 h-6 min-w-[24px] min-h-[24px] text-base transition-colors"
+                          className="flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full w-5 h-5 min-w-[20px] min-h-[20px] text-xs transition-colors"
                         >
                           ×
                         </button>

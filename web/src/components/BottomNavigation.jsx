@@ -129,8 +129,8 @@ const BottomNavigation = React.memo(() => {
   }, [location.pathname]);
 
   return (
-    <nav
-      className="flex-shrink-0 flex h-20 items-center justify-around"
+  <nav
+      className="flex-shrink-0 flex h-16 items-center justify-around"
       style={{
         position: 'fixed',
         bottom: 0,
@@ -147,8 +147,8 @@ const BottomNavigation = React.memo(() => {
       }}
     >
       <button
-        onClick={() => navigate('/main')}
-        className={`flex flex-col items-center justify-center gap-1.5 py-2 ${isActive('/main') ? 'text-[#00BCD4]' : 'text-text-subtle-light dark:text-text-subtle-dark hover:text-text-primary-light dark:hover:text-text-primary-dark transition-colors'
+      onClick={() => navigate('/main')}
+      className={`flex flex-col items-center justify-center gap-1 py-1.5 ${isActive('/main') ? 'text-primary' : 'text-text-subtle-light dark:text-text-subtle-dark hover:text-text-primary-light dark:hover:text-text-primary-dark transition-colors'
           }`}
       >
         <span className="material-symbols-outlined" style={{ fontSize: 26 }}>home</span>
@@ -156,8 +156,8 @@ const BottomNavigation = React.memo(() => {
       </button>
       {/* 검색 탭 */}
       <button
-        onClick={() => navigate('/search')}
-        className={`flex flex-col items-center justify-center gap-1.5 py-2 ${isActive('/search') ? 'text-[#00BCD4]' : 'text-text-subtle-light dark:text-text-subtle-dark hover:text-text-primary-light dark:hover:text-text-primary-dark transition-colors'
+      onClick={() => navigate('/search')}
+      className={`flex flex-col items-center justify-center gap-1 py-1.5 ${isActive('/search') ? 'text-primary' : 'text-text-subtle-light dark:text-text-subtle-dark hover:text-text-primary-light dark:hover:text-text-primary-dark transition-colors'
           }`}
       >
         <span className="material-symbols-outlined" style={{ fontSize: 26 }}>search</span>
@@ -167,21 +167,21 @@ const BottomNavigation = React.memo(() => {
         onClick={() => navigate('/upload')}
         className="flex flex-col items-center gap-1 relative"
         style={{
-          background: '#00BCD4',
+          background: '#26C6DA',
           borderRadius: '50%',
-          width: '56px',
-          height: '56px',
+          width: '50px',
+          height: '50px',
           justifyContent: 'center',
           alignItems: 'center',
           boxShadow: '0 4px 12px rgba(0, 188, 212, 0.3)',
-          marginTop: '-8px'
+          marginTop: '-4px'
         }}
       >
         <span className="material-symbols-outlined" style={{ color: 'white', fontSize: '28px' }}>add</span>
       </button>
       <button
         onClick={() => navigate('/map')}
-        className={`flex flex-col items-center justify-center gap-1.5 py-2 ${isActive('/map') ? 'text-[#00BCD4]' : 'text-text-subtle-light dark:text-text-subtle-dark hover:text-text-primary-light dark:hover:text-text-primary-dark transition-colors'
+        className={`flex flex-col items-center justify-center gap-1 py-1.5 ${isActive('/map') ? 'text-primary' : 'text-text-subtle-light dark:text-text-subtle-dark hover:text-text-primary-light dark:hover:text-text-primary-dark transition-colors'
           }`}
       >
         <span className="material-symbols-outlined" style={{ fontSize: 26 }}>map</span>
@@ -189,7 +189,7 @@ const BottomNavigation = React.memo(() => {
       </button>
       <button
         onClick={() => navigate('/profile')}
-        className={`flex flex-col items-center justify-center gap-1.5 py-2 ${isActive('/profile') ? 'text-[#00BCD4]' : 'text-text-subtle-light dark:text-text-subtle-dark hover:text-text-primary-light dark:hover:text-text-primary-dark transition-colors'
+        className={`flex flex-col items-center justify-center gap-1 py-1.5 ${isActive('/profile') ? 'text-primary' : 'text-text-subtle-light dark:text-text-subtle-dark hover:text-text-primary-light dark:hover:text-text-primary-dark transition-colors'
           }`}
       >
         <span className="material-symbols-outlined" style={{ fontSize: 26 }}>person</span>

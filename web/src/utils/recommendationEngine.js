@@ -226,20 +226,20 @@ export const getRecommendedRegions = (posts, recommendationType = 'blooming') =>
 };
 
 /**
- * 추천 타입 목록
+ * 추천 타입 목록 (활발한 지역 먼저 노출)
  */
 export const RECOMMENDATION_TYPES = [
-  {
-    id: 'blooming',
-    name: '🌸 개화 정보',
-    description: '개화상태 80% 이상인 곳',
-    icon: '🌸'
-  },
   {
     id: 'active',
     name: '🔥 활발한 지역',
     description: '최근 업로드가 많은 곳',
     icon: '🔥'
+  },
+  {
+    id: 'blooming',
+    name: '🌸 개화 정보',
+    description: '개화상태 80% 이상인 곳',
+    icon: '🌸'
   },
   {
     id: 'popular',

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNavigation from '../components/BottomNavigation';
-import { getAvailableBadges, getEarnedBadges, calculateUserStats, getBadgeDisplayName } from '../utils/badgeSystem';
+import { getAvailableBadges, getEarnedBadgesForDisplay, calculateUserStats, getBadgeDisplayName } from '../utils/badgeSystem';
 import { logger } from '../utils/logger';
 
 const BadgeListScreen = () => {
@@ -23,7 +23,7 @@ const BadgeListScreen = () => {
     const stats = calculateUserStats(myPosts, savedUser);
 
     const allBadges = getAvailableBadges(stats);
-    const earned = getEarnedBadges();
+    const earned = getEarnedBadgesForDisplay();
 
     logger.log('📋 로드된 뱃지:', {
       전체: allBadges.length,
@@ -89,7 +89,7 @@ const BadgeListScreen = () => {
     })
     .filter(badge => !badge.hidden) // 히든 뱃지는 기본적으로 숨김
     .sort((a, b) => {
-      const categoryOrder = { '온보딩': 1, '지역 가이드': 2, '실시간 정보': 3, '도움 지수': 4, '정확한 정보': 5, '친절한 여행자': 6, '기여도': 7 };
+      const categoryOrder = { '온보딩': 1, '지역 가이드': 2, '실시간 정보': 3, '도움 지수': 4, '정확한 정보': 5, '친절한 여행자': 6, '기여도': 7, '신뢰지수': 8 };
       const orderA = categoryOrder[a.category] || 999;
       const orderB = categoryOrder[b.category] || 999;
       if (orderA !== orderB) return orderA - orderB;
@@ -495,54 +495,65 @@ const BadgeListScreen = () => {
         {/* 뱃지 그리드 */}
         <main className="px-4 pb-28" style={{ minHeight: 'calc(100vh - 64px)' }}>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {filteredBadges.map((badge, index) => (
+            {filteredBadges.map((badge, index) => {
+              const hasNumericProgress = badge.progressTarget != null && badge.progressCurrent !== undefined;
+              const progressText = hasNumericProgress
+                ? `${badge.progressCurrent} / ${badge.progressTarget}${badge.progressUnit || ''}`
+                : `${Math.round(badge.progress || 0)}%`;
+              return (
               <button
                 key={badge.name || index}
                 onClick={() => handleBadgeClick(badge)}
-                className={`flex flex-col gap-2 items-center text-center p-4 rounded-xl transition-all hover:scale-105 ${badge.isEarned
-                    ? 'bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary shadow-lg'
+                className={`flex flex-col gap-2 items-center text-center p-4 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${badge.isEarned
+                    ? 'bg-gradient-to-br from-primary/15 to-primary/5 border-2 border-primary shadow-lg ring-2 ring-primary/20'
                     : 'bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700'
                   }`}
               >
                 {/* 뱃지 아이콘 */}
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center bg-primary/10 ${!badge.isEarned ? 'opacity-40 grayscale' : 'shadow-md'}`}>
-                  <span className="text-4xl">
+                <div className={`relative w-16 h-16 rounded-full flex items-center justify-center ${badge.isEarned ? 'bg-primary/20 shadow-md' : 'bg-gray-200 dark:bg-gray-700 opacity-70'}`}>
+                  <span className={`text-4xl ${badge.isEarned ? '' : 'grayscale opacity-80'}`}>
                     {badge.icon || '🏆'}
                   </span>
+                  {badge.isEarned && (
+                    <span className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold border-2 border-white dark:border-gray-900" title="획득 완료">✓</span>
+                  )}
                 </div>
 
                 {/* 뱃지 정보 */}
-                <div className="flex flex-col gap-1">
-                  <p className={`text-sm font-bold leading-tight ${badge.isEarned ? 'text-primary' : 'text-gray-600 dark:text-gray-400'}`}>
+                <div className="flex flex-col gap-0.5 w-full min-w-0">
+                  <p className={`text-sm font-bold leading-tight truncate ${badge.isEarned ? 'text-primary' : 'text-gray-700 dark:text-gray-300'}`}>
                     {getBadgeDisplayName(badge)}
                   </p>
+                  {badge.shortCondition && (
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate" title={badge.shortCondition}>
+                      {badge.shortCondition}
+                    </p>
+                  )}
 
-                  {/* 난이도 (1=하, 2=중, 3=상, 4=최상) */}
                   {badge.isEarned ? (
-                    <div className="flex items-center justify-center gap-1.5 mt-1">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${[3, 4].includes(badge.difficulty) ? 'bg-primary-dark text-white' :
-                          badge.difficulty === 2 ? 'bg-blue-500 text-white' :
-                            'bg-green-500 text-white'
-                        }`}>
+                    <div className="flex items-center justify-center gap-1.5 mt-1 flex-wrap">
+                      <span className="text-[10px] font-bold text-green-600 dark:text-green-400">🎉 획득</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${[3, 4].includes(badge.difficulty) ? 'bg-primary/90 text-white' : badge.difficulty === 2 ? 'bg-blue-500/90 text-white' : 'bg-green-500/90 text-white'}`}>
                         {typeof badge.difficulty === 'number' ? ({ 1: '하', 2: '중', 3: '상', 4: '최상' }[badge.difficulty] || '중') : (badge.difficulty || '중')}
                       </span>
                     </div>
                   ) : (
-                    <div className="mt-1">
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div className="mt-1.5 w-full">
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                         <div
-                          className="bg-primary h-1.5 rounded-full transition-all"
-                          style={{ width: `${badge.progress || 0}%` }}
-                        ></div>
+                          className="bg-primary h-2 rounded-full transition-all duration-500 min-w-0"
+                          style={{ width: `${Math.min(100, badge.progress || 0)}%` }}
+                        />
                       </div>
-                      <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-1">
-                        {Math.round(badge.progress || 0)}%
+                      <p className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mt-0.5">
+                        {progressText}
                       </p>
                     </div>
                   )}
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
 
           {/* 빈 상태 */}
@@ -571,80 +582,98 @@ const BadgeListScreen = () => {
 
       <BottomNavigation />
 
-      {/* 뱃지 상세 모달 - 난이도 & 포인트 표시 */}
+      {/* 뱃지 상세 모달 - 달성 조건 명시 + 획득 시 성취감 피드백 */}
       {selectedBadge && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={closeModal}
         >
           <div 
-            className="mx-4 flex w-full max-w-sm flex-col rounded-xl bg-white dark:bg-background-dark text-center shadow-2xl"
-            style={{ 
-              maxHeight: '85vh',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column'
-            }}
+            className={`w-full max-w-sm flex flex-col rounded-2xl overflow-hidden shadow-2xl ${selectedBadge.isEarned ? 'bg-gradient-to-b from-primary/10 to-white dark:from-primary/20 dark:to-gray-900 ring-2 ring-primary/30' : 'bg-white dark:bg-background-dark'}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex flex-col items-center p-6" style={{ flex: '1 1 auto', overflow: 'hidden' }}>
+            <div className="flex flex-col items-center p-6 overflow-y-auto max-h-[85vh]">
+              {/* 획득 시 상단 축하 문구 */}
+              {selectedBadge.isEarned && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/15 text-green-700 dark:text-green-400 mb-3">
+                  <span className="text-lg">🎉</span>
+                  <span className="text-sm font-bold">획득 완료!</span>
+                </div>
+              )}
+
               {/* 뱃지 아이콘 */}
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center bg-primary/10 flex-shrink-0 ${!selectedBadge.isEarned ? 'opacity-40 grayscale' : 'shadow-lg'}`}>
-                <span className="text-5xl">
+              <div className={`relative w-24 h-24 rounded-full flex items-center justify-center flex-shrink-0 ${selectedBadge.isEarned ? 'bg-primary/20 shadow-lg' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                <span className={`text-5xl ${selectedBadge.isEarned ? '' : 'grayscale opacity-80'}`}>
                   {selectedBadge.icon || '🏆'}
                 </span>
+                {selectedBadge.isEarned && (
+                  <span className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold border-2 border-white dark:border-gray-900">✓</span>
+                )}
               </div>
 
-              {/* 뱃지 이름 */}
-              <h2 className={`mt-3 text-lg font-bold flex-shrink-0 ${selectedBadge.isEarned ? 'text-primary' : 'text-gray-700 dark:text-gray-300'}`}>
+              <h2 className={`mt-4 text-xl font-bold ${selectedBadge.isEarned ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>
                 {getBadgeDisplayName(selectedBadge)}
               </h2>
 
-              {/* 난이도 (1=하, 2=중, 3=상, 4=최상) */}
-              <div className="flex items-center justify-center gap-2 mt-2 flex-shrink-0">
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${[3, 4].includes(selectedBadge.difficulty) ? 'bg-primary-dark text-white' :
-                    selectedBadge.difficulty === 2 ? 'bg-blue-500 text-white' :
-                      'bg-green-500 text-white'
-                  }`}>
-                  난이도: {typeof selectedBadge.difficulty === 'number' ? ({ 1: '하', 2: '중', 3: '상', 4: '최상' }[selectedBadge.difficulty] || '중') : (selectedBadge.difficulty || '중')}
+              {/* 달성 조건 한 줄 (명확하게) */}
+              {selectedBadge.shortCondition && (
+                <p className="mt-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded-lg">
+                  목표: {selectedBadge.shortCondition}
+                </p>
+              )}
+
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`text-xs font-bold px-3 py-1 rounded-full ${[3, 4].includes(selectedBadge.difficulty) ? 'bg-primary text-white' : selectedBadge.difficulty === 2 ? 'bg-blue-500 text-white' : 'bg-green-500 text-white'}`}>
+                  난이도 {typeof selectedBadge.difficulty === 'number' ? ({ 1: '하', 2: '중', 3: '상', 4: '최상' }[selectedBadge.difficulty] || '중') : (selectedBadge.difficulty || '중')}
                 </span>
               </div>
 
-              {/* 설명 */}
-              <p className="mt-3 text-xs text-text-secondary-light dark:text-text-secondary-dark leading-relaxed flex-shrink-0 px-2">
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed px-1">
                 {selectedBadge.description}
               </p>
 
-              {/* 진행도 */}
+              {/* 미획득: 진행도 + 현재/목표 수치 */}
               {!selectedBadge.isEarned && (
-                <div className="mt-3 w-full flex-shrink-0 px-2">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] text-gray-500">진행도</span>
-                    <span className="text-[10px] font-bold text-primary">
-                      {Math.round(selectedBadge.progress || 0)}%
+                <div className="mt-4 w-full space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">진행 상황</span>
+                    <span className="font-bold text-primary">
+                      {selectedBadge.progressTarget != null && selectedBadge.progressCurrent !== undefined
+                        ? `${selectedBadge.progressCurrent} / ${selectedBadge.progressTarget}${selectedBadge.progressUnit || ''}`
+                        : `${Math.round(selectedBadge.progress || 0)}%`}
                     </span>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
                     <div
-                      className="bg-gradient-to-r from-primary to-primary/80 h-2 rounded-full transition-all"
-                      style={{ width: `${selectedBadge.progress || 0}%` }}
-                    ></div>
+                      className="bg-gradient-to-r from-primary to-primary/80 h-3 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, selectedBadge.progress || 0)}%` }}
+                    />
                   </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {selectedBadge.shortCondition ? `조건을 달성하면 뱃지를 획득할 수 있어요.` : '활동을 이어가면 뱃지를 획득할 수 있어요.'}
+                  </p>
                 </div>
               )}
+
+              {/* 획득 시: 획득일 + 성취 메시지 */}
               {selectedBadge.isEarned && selectedBadge.earnedAt && (
-                <div className="mt-2 px-3 py-1.5 bg-primary/10 rounded-lg flex-shrink-0">
-                  <span className="text-xs font-bold text-primary">
-                    획득일: {new Date(selectedBadge.earnedAt).toLocaleDateString('ko-KR')}
-                  </span>
+                <div className="mt-4 w-full flex flex-col gap-2">
+                  <div className="px-4 py-3 rounded-xl bg-primary/10 border border-primary/20">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">획득일</p>
+                    <p className="text-base font-bold text-primary">
+                      {new Date(selectedBadge.earnedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                    👍 이 조건을 달성했어요. 앞으로도 많은 제보 부탁해요!
+                  </p>
                 </div>
               )}
             </div>
-            <div className="border-t border-border-light dark:border-border-dark flex-shrink-0">
+            <div className="border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
               <button
                 onClick={closeModal}
-                className="w-full py-3 font-semibold text-primary hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                className="w-full py-4 font-semibold text-primary hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
               >
                 확인
               </button>

@@ -14,7 +14,6 @@ const RealtimeFeedScreen = () => {
   const [currentUserCount, setCurrentUserCount] = useState(0);
   const contentRef = useRef(null);
   const [visibleCount, setVisibleCount] = useState(8); // 2×4 = 8개부터 시작
-  const [showHeader, setShowHeader] = useState(true);
 
   useEffect(() => {
     const loadData = () => {
@@ -78,24 +77,11 @@ const RealtimeFeedScreen = () => {
     };
   }, []);
 
-  // 스크롤이 시작되면 상단 헤더(제목 영역)를 숨김
-  useEffect(() => {
-    const container = contentRef.current;
-    if (!container) return;
-
-    const onScroll = () => {
-      const y = container.scrollTop;
-      // 약간만 내려도 헤더를 숨기고, 맨 위에 가까우면 다시 표시
-      setShowHeader(y < 8);
-    };
-
-    container.addEventListener('scroll', onScroll, { passive: true });
-    return () => container.removeEventListener('scroll', onScroll);
-  }, []);
-
   return (
-    <div className="screen-layout" style={{ background: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* 헤더 */}
+    <div className="screen-layout" style={{ background: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* 업로드 화면과 동일하게, 상단에 여백 + 고정 헤더가 있고 그 아래만 스크롤되도록 구성 */}
+      <div style={{ height: '20px' }} />
+      {/* 상단 고정 영역: 뒤로가기 버튼 + \"지금 여기는\" 문구가 항상 보이는 구역 */}
       <header
         className="screen-header"
         style={{
@@ -108,27 +94,48 @@ const RealtimeFeedScreen = () => {
           padding: '10px 16px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-start',
-          gap: '12px',
-          transition: 'transform 0.2s ease-out, opacity 0.2s ease-out',
-          transform: showHeader ? 'translateY(0)' : 'translateY(-100%)',
-          opacity: showHeader ? 1 : 0
+          justifyContent: 'space-between',
+          gap: '8px'
         }}
       >
+        {/* 뒤로가기 버튼 - 항상 좌측 상단 */}
         <button
           onClick={() => navigate(-1)}
           style={{
             border: 'none',
             background: 'none',
-            fontSize: '26px',
             cursor: 'pointer',
             display: 'flex',
-            alignItems: 'center'
+            alignItems: 'center',
+            padding: 0
           }}
         >
-          <span className="material-symbols-outlined" style={{ color: '#333' }}>arrow_back</span>
+          <span
+            className="material-symbols-outlined"
+            style={{
+              color: '#333',
+              fontSize: 24
+            }}
+          >
+            arrow_back
+          </span>
         </button>
-        <h1 style={{ fontSize: '20px', fontWeight: 700, margin: 0, color: '#1f2937' }}>지금 여기는</h1>
+
+        {/* 중앙에 항상 보이는 "지금 여기는" 문구 */}
+        <div
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            fontSize: 16,
+            fontWeight: 600,
+            color: '#1f2937'
+          }}
+        >
+          지금 여기는
+        </div>
+
+        {/* 오른쪽에 빈 공간(뒤로가기 버튼과 균형 맞추기 위한 더미) */}
+        <div style={{ width: 24, height: 24 }} />
       </header>
 
       {/* 컨텐츠 */}
@@ -160,25 +167,22 @@ const RealtimeFeedScreen = () => {
                   key={`${post.id}-${index}`}
                   onClick={() => navigate(`/post/${post.id}`, { state: { post, allPosts: realtimeData } })}
                   style={{
-                    background: '#ffffff',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    boxShadow: '0 2px 6px rgba(15,23,42,0.08)',
+                    overflow: 'visible',
                     cursor: 'pointer',
                     display: 'flex',
                     flexDirection: 'column'
                   }}
                 >
-                  {/* 이미지: 정사각형 (padding-bottom 방식으로 호환성 확보) */}
-                  <div style={{ width: '100%', paddingBottom: '100%', height: 0, position: 'relative', background: '#e5e7eb' }}>
+                  {/* 이미지: 정사각형, 라운드로 분리 */}
+                  <div style={{ width: '100%', paddingBottom: '125%', height: 0, position: 'relative', background: '#e5e7eb', borderRadius: '14px', overflow: 'hidden', marginBottom: '4px' }}>
                     {post.image ? (
                       <img
                         src={post.image}
                         alt={post.location}
-                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '14px' }}
                       />
                     ) : (
-                      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
+                      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', borderRadius: '14px' }}>
                         <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>image</span>
                       </div>
                     )}
@@ -188,10 +192,10 @@ const RealtimeFeedScreen = () => {
                     </div>
                   </div>
 
-                  {/* 하단 시트: 좌우 동일 높이, 시간·기온 한 줄(기온 우측) */}
-                  <div style={{ padding: '12px 14px 14px', background: '#f8fafc', borderTop: '3px solid #475569', boxShadow: '0 -2px 0 0 #475569, 0 2px 8px rgba(0,0,0,0.08)', minHeight: '92px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  {/* 하단: 여백만 사용 */}
+                  <div style={{ padding: '6px 14px 10px', minHeight: '92px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      📍 {post.location || '어딘가의 지금'}
+                      {post.location || '어딘가의 지금'}
                     </div>
                     {(post.content || post.note) && (
                       <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px', lineHeight: 1.4, height: '2.8em', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
