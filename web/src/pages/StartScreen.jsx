@@ -6,7 +6,7 @@ import { logger } from '../utils/logger';
 
 const StartScreen = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loginWithProvider, authLoading } = useAuth();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -34,28 +34,8 @@ const StartScreen = () => {
     setError('');
 
     try {
-      // 백엔드 API URL 가져오기
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-      // 소셜 로그인 제공자에 따라 엔드포인트 결정
-      const providerLower = provider.toLowerCase();
-      let authEndpoint = '';
-
-      if (providerLower === 'kakao') {
-        authEndpoint = `${apiUrl}/api/auth/kakao`;
-      } else if (providerLower === 'naver') {
-        authEndpoint = `${apiUrl}/api/auth/naver`;
-      } else if (providerLower === 'google') {
-        authEndpoint = `${apiUrl}/api/auth/google`;
-      } else {
-        throw new Error('지원하지 않는 소셜 로그인 제공자입니다.');
-      }
-
-      // 백엔드로 리다이렉트 (OAuth 인증 시작)
-      window.location.href = authEndpoint;
-
-      // 리다이렉트되므로 여기서는 로딩 상태만 유지
-      // 실제 로그인 처리는 AuthCallbackScreen에서 수행됨
+      await loginWithProvider(provider.toLowerCase());
+      // Supabase가 redirect 처리하므로 여기서는 별도 처리 없음
     } catch (error) {
       logger.error('소셜 로그인 실패:', error);
       setError(`${provider} 로그인에 실패했습니다.`);
@@ -96,8 +76,8 @@ const StartScreen = () => {
           <div className="flex flex-col w-full gap-3 mb-3">
             {/* 카카오 로그인 - 카카오톡 느낌의 말풍선 + TALK 로고 */}
             <button
-              onClick={() => handleSocialLogin('Kakao')}
-              disabled={loading}
+              onClick={() => handleSocialLogin('kakao')}
+              disabled={loading || authLoading}
               className="flex cursor-pointer items-center justify-center gap-3 rounded-full h-12 px-6 bg-[#FEE500] text-[#000000] text-sm font-bold tracking-tight hover:bg-[#fdd835] active:bg-[#fbc02d] transition-all shadow-md disabled:opacity-50"
               style={{ touchAction: 'manipulation' }}
             >
@@ -131,8 +111,8 @@ const StartScreen = () => {
 
             {/* 구글 로그인 */}
             <button
-              onClick={() => handleSocialLogin('Google')}
-              disabled={loading}
+              onClick={() => handleSocialLogin('google')}
+              disabled={loading || authLoading}
               className="flex cursor-pointer items-center justify-center gap-3 rounded-full h-12 px-6 bg-white dark:bg-gray-900 text-[#1F1F1F] dark:text-white text-sm font-semibold tracking-tight border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-gray-800 active:bg-zinc-100 transition-all shadow-sm disabled:opacity-50"
               style={{ touchAction: 'manipulation' }}
             >
