@@ -13,6 +13,7 @@ import { follow, unfollow, isFollowing, getFollowerCount, getFollowingCount, get
 import { logger } from '../utils/logger';
 import { getDisplayImageUrl } from '../api/upload';
 import api from '../api/axios';
+import { cleanLegacyUploadedPosts } from '../utils/localStorageManager';
 
 // HTML 문자열(template literal)로 src/alt를 주입할 때 속성 안전 처리
 const escapeHtmlAttr = (value) => {
@@ -245,7 +246,8 @@ const ProfileScreen = () => {
       setRepresentativeBadge(repBadge);
     }
 
-    // 내가 업로드한 게시물 로드 (영구 보관 - 필터링 없음!)
+    // 목업/테스트 게시물 흔적 제거 후 내 게시물만 로드
+    cleanLegacyUploadedPosts();
     const uploadedPosts = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
     const userPosts = uploadedPosts.filter(post => post.userId === userId);
     const userPostsWithCoords = userPosts.filter(p => getPostCoordinates(p));
@@ -872,15 +874,11 @@ const ProfileScreen = () => {
 
   const toggleEditMode = () => {
     if (isEditMode) {
-      // 편집 모드 종료
       setSelectedPhotos([]);
       setIsEditMode(false);
       return;
     }
-
-    // 편집 모드 진입 시에는 항상 "날짜 순" 보기로 전환해서
-    // 체크박스 + 삭제 버튼 UI가 확실히 보이도록 한다.
-    setPhotoViewMode('date');
+    // 모아보기/날짜순 현재 뷰 유지한 채 편집 모드 진입
     setIsEditMode(true);
   };
 
@@ -1637,8 +1635,10 @@ const ProfileScreen = () => {
                               }}
                               className="cursor-pointer"
                             >
-                              {/* 이미지 */}
-                              <div className="aspect-square relative overflow-hidden rounded-md mb-1">
+                              {/* 이미지 - 선택 시 하늘색 원 표시 */}
+                              <div
+                                className={`aspect-square relative overflow-hidden rounded-md mb-1 ${isEditMode && selectedPhotos.includes(post.id) ? 'ring-2 ring-sky-400 ring-offset-1 rounded-md' : ''}`}
+                              >
                                 {post.videos && post.videos.length > 0 ? (
                                   <video
                                     src={post.videos[0]}
@@ -1656,19 +1656,16 @@ const ProfileScreen = () => {
                                   />
                                 )}
 
-                                {/* 프로필 화면에서는 좋아요 아이콘/숫자 숨김 */}
-
-                                {/* 편집 모드: 선택 체크박스 */}
+                                {/* 편집 모드: 선택 시 하늘색 원 */}
                                 {isEditMode && (
                                   <div
-                                    className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer bg-white/90 dark:bg-gray-800/90 border-gray-300 dark:border-gray-600"
+                                    className={`absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center transition-all cursor-pointer ${selectedPhotos.includes(post.id) ? 'bg-sky-400 ring-2 ring-sky-300' : 'bg-white/80 dark:bg-gray-800/80 ring-2 ring-gray-300 dark:ring-gray-600'}`}
                                     onClick={(e) => { e.stopPropagation(); togglePhotoSelection(post.id); }}
                                     role="button"
+                                    aria-label={selectedPhotos.includes(post.id) ? '선택 해제' : '선택'}
                                   >
-                                    {selectedPhotos.includes(post.id) ? (
-                                      <span className="text-primary text-[10px] font-semibold">선택</span>
-                                    ) : (
-                                      <span className="text-gray-400 text-[10px]">선택</span>
+                                    {selectedPhotos.includes(post.id) && (
+                                      <span className="text-white text-[10px] font-bold">✓</span>
                                     )}
                                   </div>
                                 )}
@@ -1689,9 +1686,18 @@ const ProfileScreen = () => {
               </div>
             )}
 
-            {/* 내 사진 탭 - 모아보기 (사용자 정의 기준: 좋아요 순) */}
+            {/* 내 사진 탭 - 모아보기 (편집 가능, 선택 시 하늘색 원) */}
             {activeTab === 'my' && myPosts.length > 0 && photoViewMode === 'custom' && (
               <div className="space-y-3">
+                {isEditMode && selectedPhotos.length > 0 && (
+                  <button
+                    onClick={deleteSelectedPhotos}
+                    className="w-full py-2 px-3 rounded-lg bg-red-500/90 hover:bg-red-600 text-white text-xs font-medium flex items-center justify-center gap-1.5 mb-3"
+                  >
+                    <span className="material-symbols-outlined text-base">delete</span>
+                    <span>선택 {selectedPhotos.length}장 삭제</span>
+                  </button>
+                )}
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     모아보기: 좋아요 많은 순으로 보기
@@ -1704,23 +1710,38 @@ const ProfileScreen = () => {
                   ).map((post, index) => {
                     const allPosts = myPosts;
                     const currentIndex = allPosts.findIndex(p => p.id === post.id);
+                    const isSelected = selectedPhotos.includes(post.id);
 
                     return (
-                      <button
+                      <div
                         key={post.id || index}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         onClick={() => {
-                          navigate(`/post/${post.id}`, {
-                            state: {
-                              post,
-                              allPosts,
-                              currentPostIndex: currentIndex >= 0 ? currentIndex : 0,
-                            },
-                          });
+                          if (isEditMode) {
+                            togglePhotoSelection(post.id);
+                          } else {
+                            navigate(`/post/${post.id}`, {
+                              state: {
+                                post,
+                                allPosts,
+                                currentPostIndex: currentIndex >= 0 ? currentIndex : 0,
+                              },
+                            });
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            if (isEditMode) togglePhotoSelection(post.id);
+                            else navigate(`/post/${post.id}`, { state: { post, allPosts, currentPostIndex: currentIndex >= 0 ? currentIndex : 0 } });
+                          }
                         }}
                         className="cursor-pointer text-left"
                       >
-                        <div className="aspect-square relative overflow-hidden rounded-md mb-1">
+                        <div
+                          className={`aspect-square relative overflow-hidden rounded-md mb-1 ${isEditMode && isSelected ? 'ring-2 ring-sky-400 ring-offset-1 rounded-md' : ''}`}
+                        >
                           {post.videos && post.videos.length > 0 ? (
                             <video
                               src={post.videos[0]}
@@ -1736,13 +1757,23 @@ const ProfileScreen = () => {
                               className="w-full h-full object-cover"
                             />
                           )}
+                          {isEditMode && (
+                            <div
+                              className={`absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center transition-all ${isSelected ? 'bg-sky-400 ring-2 ring-sky-300' : 'bg-white/80 dark:bg-gray-800/80 ring-2 ring-gray-300 dark:ring-gray-600'}`}
+                              onClick={(e) => { e.stopPropagation(); togglePhotoSelection(post.id); }}
+                              role="button"
+                              aria-label={isSelected ? '선택 해제' : '선택'}
+                            >
+                              {isSelected && <span className="text-white text-[10px] font-bold">✓</span>}
+                            </div>
+                          )}
                         </div>
                         {(post.note || post.location) && (
                           <p className="text-[10px] text-text-secondary-light dark:text-text-secondary-dark truncate">
                             {post.note || post.location}
                           </p>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
