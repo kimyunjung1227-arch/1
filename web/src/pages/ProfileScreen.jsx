@@ -921,8 +921,14 @@ const ProfileScreen = () => {
     if (isEditMode) {
       // 편집 모드 종료
       setSelectedPhotos([]);
+      setIsEditMode(false);
+      return;
     }
-    setIsEditMode(!isEditMode);
+
+    // 편집 모드 진입 시에는 항상 "날짜 순" 보기로 전환해서
+    // 체크박스 + 삭제 버튼 UI가 확실히 보이도록 한다.
+    setPhotoViewMode('date');
+    setIsEditMode(true);
   };
 
   const togglePhotoSelection = (postId) => {
