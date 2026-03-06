@@ -24,8 +24,8 @@ export default defineConfig({
     },
   ],
   publicDir: 'public',
-  // GitHub Pages 배포용 base 설정은 제거 (Vercel에서는 루트 사용)
-  // base: '/livejourney.co.kr/',
+  // GitHub Pages: 서브경로 배포 시 필수 (CI에서 VITE_BASE_URL 주입). 로컬/Vercel은 기본 '/'
+  base: process.env.VITE_BASE_URL || '/',
   server: {
     host: '0.0.0.0',
     port: 3000,

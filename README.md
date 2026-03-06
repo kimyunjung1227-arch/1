@@ -22,12 +22,16 @@
 📖 **[GITHUB_DEPLOY_GUIDE.md](./GITHUB_DEPLOY_GUIDE.md)** - 상세 배포 가이드  
 📖 **[카페_공유_가이드.md](./카페_공유_가이드.md)** - 빠른 배포 가이드
 
-**배포 URL**: `https://kimyunjung1227-arch.github.io/app/`
+**배포 URL**: `https://kimyunjung1227-arch.github.io/LiveJourney12/` (저장소 이름에 따라 자동)
+
+- **자동 배포**: `master`에 푸시하면 GitHub Actions가 빌드 후 Pages에 배포합니다.
+- **한 번만 설정**: 저장소 **Settings** → **Pages** → **Source**를 **GitHub Actions**로 선택해야 합니다.
+- 상세: [GITHUB_DEPLOY_GUIDE.md](./GITHUB_DEPLOY_GUIDE.md)
 
 ### 배포 전 체크리스트
 - [x] 프론트엔드 빌드 테스트 완료 ✅
-- [x] GitHub Pages 배포 설정 완료 ✅
-- [x] 404 에러 방지 설정 완료 ✅
+- [x] GitHub Actions 워크플로로 자동 배포 ✅
+- [x] Pages Source = GitHub Actions 설정 필요 (1회)
 
 ---
 
