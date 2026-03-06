@@ -290,6 +290,8 @@ const MainScreen = () => {
 
             const firstImageUrl = (post.images && post.images.length > 0) ? post.images[0] : (post.image || post.thumbnail || '');
             const firstVideoUrl = (post.videos && post.videos.length > 0) ? post.videos[0] : '';
+            const likesNum = Number(post.likes ?? post.likeCount ?? 0) || 0;
+            const commentsArr = Array.isArray(post.comments) ? post.comments : [];
             return {
                 ...post,
                 id: post.id,
@@ -299,8 +301,9 @@ const MainScreen = () => {
                 title: post.location,
                 time: dynamicTime,
                 content: post.note || post.content || `${post.location}의 모습`,
-                likes: post.likes || 0,
-                comments: post.comments ?? [],
+                likes: likesNum,
+                likeCount: likesNum,
+                comments: commentsArr,
                 weather: post.weather || null,
                 surgeIndicator,
                 surgePercent,
@@ -430,7 +433,7 @@ const MainScreen = () => {
             const { postId, likesCount } = e.detail || {};
             if (!postId || typeof likesCount !== 'number') return;
             const id = String(postId);
-            const updateLikes = (p) => (p && String(p.id) === id ? { ...p, likes: likesCount } : p);
+            const updateLikes = (p) => (p && String(p.id) === id ? { ...p, likes: likesCount, likeCount: likesCount } : p);
             setRealtimeData((prev) => prev.map(updateLikes));
             setCrowdedData((prev) => prev.map(updateLikes));
             setRecommendedData((prev) => prev.map(updateLikes));
@@ -845,7 +848,7 @@ const MainScreen = () => {
                             const regionKey = (post.region || post.location || '').trim().split(/\s+/)[0] || post.region || post.location;
                             const weather = post.weather || weatherByRegion[regionKey] || null;
                             const hasWeather = weather && (weather.icon || weather.temperature);
-                            const likeCount = post.likes ?? 0;
+                            const likeCount = Number(post.likes ?? post.likeCount ?? 0) || 0;
                             const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;
                             return (
                                 <div
@@ -979,7 +982,7 @@ const MainScreen = () => {
                                             ) : (
                                                 <img src={getDisplayImageUrl(post.image || post.thumbnail)} alt={post.location} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '12px' }} />
                                             )}
-                                            <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(255,255,255,0.9)', padding: '3px 6px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, color: '#333' }}>♥ {post.likes ?? 0}</div>
+                                            <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(255,255,255,0.9)', padding: '3px 6px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, color: '#333' }}>♥ {Number(post.likes ?? post.likeCount ?? 0) || 0}</div>
                                         </div>
                                         <div style={{ padding: '8px 4px 6px' }}>
                                             <div style={{ fontSize: '12px', fontWeight: 600, color: '#333', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.content || post.note || post.location || ''}</div>
@@ -1075,9 +1078,9 @@ const MainScreen = () => {
                                             ) : (
                                                 <div style={{ width: '100%', height: '100%', background: '#e5e7eb', borderRadius: '12px' }} />
                                             )}
-                                            {typeof post.likes === 'number' && post.likes > 0 && (
+                                            {((Number(post.likes ?? post.likeCount ?? 0) || 0) > 0) && (
                                                 <span style={{ position: 'absolute', bottom: '6px', right: '8px', fontSize: '10px', fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', padding: '2px 6px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                                                    ♥ {post.likes}
+                                                    ♥ {Number(post.likes ?? post.likeCount ?? 0) || 0}
                                                 </span>
                                             )}
                                         </div>
