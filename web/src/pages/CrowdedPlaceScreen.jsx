@@ -7,6 +7,7 @@ import './MainScreen.css';
 import { getCombinedPosts } from '../utils/mockData';
 import { getDisplayImageUrl } from '../api/upload';
 import { fetchPostsSupabase } from '../api/postsSupabase';
+import { rankHotspotPosts } from '../utils/hotnessEngine';
 
 const FILTERS = [
     { id: '전체', label: '전체', icon: null },
@@ -99,23 +100,19 @@ const CrowdedPlaceScreen = () => {
             };
 
             const transformed = posts.map(transformPost);
-            const hotPosts = transformed
-                .filter((p) => {
-                    const hasLikes = (p.likes || 0) > 0;
-                    const isRecent = p.time && (p.time.includes('방금') || p.time.includes('분 전') || p.time.includes('시간 전'));
-                    return hasLikes || isRecent;
-                })
-                .sort((a, b) => {
-                    if (b.likes !== a.likes) return b.likes - a.likes;
-                    if (a.time && a.time.includes('방금')) return -1;
-                    if (b.time && b.time.includes('방금')) return 1;
-                    if (a.time && a.time.includes('분 전') && !(b.time && b.time.includes('분 전'))) return -1;
-                    if (b.time && b.time.includes('분 전') && !(a.time && a.time.includes('분 전'))) return 1;
-                    return 0;
-                })
-                .slice(0, 100);
-
-            setCrowdedData(hotPosts.length > 0 ? hotPosts : transformed.slice(0, 50));
+            const preFiltered = transformed.filter((p) => {
+                const hasLikes = (p.likes || 0) > 0;
+                const isRecent = p.time && (p.time.includes('방금') || p.time.includes('분 전') || p.time.includes('시간 전'));
+                return hasLikes || isRecent;
+            });
+            const toRank = preFiltered.length > 0 ? preFiltered : transformed;
+            const ranked = rankHotspotPosts(toRank, { verifyFirst: true, maxItems: 100 });
+            const crowdedWithRank = ranked.map((r) => ({
+                ...r.post,
+                _rank: r.rank,
+                _impactLabel: r.impactLabel,
+            }));
+            setCrowdedData(crowdedWithRank.length > 0 ? crowdedWithRank : transformed.slice(0, 50));
         };
         loadData();
     }, [refreshKey]);
@@ -183,7 +180,7 @@ const CrowdedPlaceScreen = () => {
                 </div>
 
                 {/* 피드 — 참고 HTML처럼 세로 리스트, 4:3 카드, 위치 뱃지 좌하단, 좋아요 우하단 */}
-                {crowdedData.length === 0 ? (
+                {crowdedData.filter((post) => matchFilter(post, activeFilter)).length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 px-6 text-center text-slate-400 dark:text-slate-500">
                         <span className="material-symbols-outlined text-5xl mb-3">local_fire_department</span>
                         <p className="text-sm mb-1">아직 실시간 핫플 게시물이 없어요</p>
@@ -194,6 +191,8 @@ const CrowdedPlaceScreen = () => {
                         {crowdedData.filter((post) => matchFilter(post, activeFilter)).map((post) => {
                             const likeCount = Number(post.likes ?? post.likeCount ?? 0) || 0;
                             const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;
+                            const rank = post._rank;
+                            const impactLabel = post._impactLabel;
                             return (
                                 <div
                                     key={post.id}
@@ -201,6 +200,11 @@ const CrowdedPlaceScreen = () => {
                                     className="group flex flex-col bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-100 dark:border-slate-700 overflow-hidden cursor-pointer"
                                 >
                                     <div className="relative w-full aspect-[4/3] bg-slate-200 overflow-hidden">
+                                        {rank != null && rank <= 3 && (
+                                            <div className="absolute top-3 left-3 z-10 w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold shadow-md">
+                                                {rank}
+                                            </div>
+                                        )}
                                         {post.thumbnailIsVideo && post.firstVideoUrl ? (
                                             <video
                                                 src={post.firstVideoUrl}
@@ -228,6 +232,9 @@ const CrowdedPlaceScreen = () => {
                                         </div>
                                     </div>
                                     <div className="p-5">
+                                        {impactLabel && (
+                                            <p className="text-xs text-primary dark:text-primary font-medium mb-1">{impactLabel}</p>
+                                        )}
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="min-w-0 flex-1">
                                                 <h3 className="text-xl font-bold text-text-main dark:text-white mb-1 truncate">{post.location || '어딘가의 지금'}</h3>

@@ -6,6 +6,7 @@ import './MainScreen.css';
 import { getCombinedPosts } from '../utils/mockData';
 import { getDisplayImageUrl } from '../api/upload';
 import { fetchPostsSupabase } from '../api/postsSupabase';
+import { rankHotspotPosts } from '../utils/hotnessEngine';
 
 const FILTERS = [
   { id: '전체', label: '전체', icon: null },
@@ -40,12 +41,15 @@ const getAvatarUrls = (post) => {
   return urls.slice(0, 3);
 };
 
+const ACHIEVE_TOAST_KEY = 'hotspot_achievement_toast_shown';
+
 const HotSpotMoreScreen = () => {
   const navigate = useNavigate();
   const [list, setList] = useState([]);
   const [activeFilter, setActiveFilter] = useState('전체');
   const [liveViewCount, setLiveViewCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [achievementToast, setAchievementToast] = useState(null);
   const contentRef = useRef(null);
 
   useEffect(() => {
@@ -113,30 +117,49 @@ const HotSpotMoreScreen = () => {
       };
 
       const transformed = posts.map(transformPost);
-      const hotPosts = transformed
-        .filter((p) => {
-          const hasLikes = (p.likes || 0) > 0;
-          const isRecent = p.time && (p.time.includes('방금') || p.time.includes('분 전') || p.time.includes('시간 전'));
-          return hasLikes || isRecent;
-        })
-        .sort((a, b) => {
-          if (b.likes !== a.likes) return b.likes - a.likes;
-          if (a.time && a.time.includes('방금')) return -1;
-          if (b.time && b.time.includes('방금')) return 1;
-          if (a.time && a.time.includes('분 전') && !(b.time && b.time.includes('분 전'))) return -1;
-          if (b.time && b.time.includes('분 전') && !(a.time && a.time.includes('분 전'))) return 1;
-          return 0;
-        })
-        .slice(0, 100);
+      const preFiltered = transformed.filter((p) => {
+        const hasLikes = (p.likes || 0) > 0;
+        const isRecent = p.time && (p.time.includes('방금') || p.time.includes('분 전') || p.time.includes('시간 전'));
+        return hasLikes || isRecent;
+      });
+      const toRank = preFiltered.length > 0 ? preFiltered : transformed;
+      const ranked = rankHotspotPosts(toRank, { verifyFirst: true, maxItems: 100 });
+      const listWithRank = ranked.map((r) => ({
+        ...r.post,
+        _rank: r.rank,
+        _impactLabel: r.impactLabel,
+      }));
+      setList(listWithRank.length > 0 ? listWithRank : transformed.slice(0, 50));
 
-      setList(hotPosts.length > 0 ? hotPosts : transformed.slice(0, 50));
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const myId = currentUser?.id ? String(currentUser.id) : null;
+      const firstPlace = listWithRank.find((p) => p._rank === 1);
+      const myTopPost = myId ? listWithRank.find((p) => p._rank <= 3 && String(p.userId ?? p.user?.id ?? p.user) === myId) : null;
+      if (myId && firstPlace && (String(firstPlace.userId ?? firstPlace.user?.id ?? firstPlace.user) === myId)) {
+        try {
+          if (!sessionStorage.getItem(ACHIEVE_TOAST_KEY)) {
+            setAchievementToast({
+              text: `회원님의 피드가 ${firstPlace.location || '이 장소'} 1위가 되었습니다. 뱃지와 보상이 지급되었습니다.`,
+              region: firstPlace.location || firstPlace.region,
+              isBusiness: !!myTopPost,
+            });
+            sessionStorage.setItem(ACHIEVE_TOAST_KEY, '1');
+          }
+        } catch (_) {}
+      } else if (myId && myTopPost) {
+        setAchievementToast((prev) => (prev ? prev : {
+          text: '현재 우리 가게 핫플 지수: 상승 중',
+          businessNote: '핫플 노출로 인해 평소보다 방문객 25% 증가 예상',
+          isBusiness: true,
+        }));
+      }
 
       const uniqueUserIds = new Set();
-      (hotPosts.length > 0 ? hotPosts : transformed).forEach((p) => {
+      (listWithRank.length > 0 ? listWithRank : transformed).forEach((p) => {
         const uid = p.userId || (typeof p.user === 'string' ? p.user : p.user?.id);
         if (uid) uniqueUserIds.add(String(uid));
       });
-      const totalEngagement = (hotPosts.length > 0 ? hotPosts : transformed).reduce((sum, p) => sum + (p.likes || 0) + (p.comments?.length || 0) * 2, 0);
+      const totalEngagement = (listWithRank.length > 0 ? listWithRank : transformed).reduce((sum, p) => sum + (p.likes || 0) + (p.comments?.length || 0) * 2, 0);
       setLiveViewCount(Math.max(uniqueUserIds.size * 2 + 3, Math.min(99, Math.floor(totalEngagement / 3) + 5)));
     };
     loadData();
@@ -161,6 +184,19 @@ const HotSpotMoreScreen = () => {
       </header>
 
       <div ref={contentRef} className="screen-content flex-1 overflow-y-auto">
+        {achievementToast && (
+          <div className="mx-5 mt-2 p-3 rounded-xl bg-primary/15 border border-primary/30 flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-text-main dark:text-white">{achievementToast.text}</p>
+              {achievementToast.businessNote && (
+                <p className="text-xs text-text-sub dark:text-slate-400 mt-1">{achievementToast.businessNote}</p>
+              )}
+            </div>
+            <button type="button" onClick={() => setAchievementToast(null)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 flex-shrink-0" aria-label="닫기">
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+          </div>
+        )}
         <section className="px-5 pt-4 pb-2">
           <div className="flex items-center gap-2 mb-1">
             <span className="inline-flex h-2 w-2 rounded-full bg-rose-400 animate-pulse" />
@@ -201,6 +237,8 @@ const HotSpotMoreScreen = () => {
               const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;
               const uploadCount = Math.min(99, commentCount + 1);
               const viewingCount = Math.max(1, Math.min(99, (likeCount + commentCount * 2) % 30 + 3));
+              const rank = post._rank;
+              const impactLabel = post._impactLabel;
               const avatars = getAvatarUrls(post);
               const regionLabel = post.region || post.location || '장소';
               const locationShort = (post.location || post.region || '')
@@ -218,8 +256,13 @@ const HotSpotMoreScreen = () => {
                   onClick={() => navigate(`/post/${post.id}`, { state: { post, allPosts: list } })}
                   className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-md active:scale-[0.99] transition-transform cursor-pointer"
                 >
-                  {/* 카드 상단: 블러 배경 + 사진 왼쪽 위치(가볍게) + 우상단 뱃지 */}
+                  {/* 카드 상단: 랭킹 뱃지 + 블러 배경 + 사진 왼쪽 위치(가볍게) + 우상단 뱃지 */}
                   <div className="relative h-32 overflow-hidden">
+                    {rank != null && rank <= 3 && (
+                      <div className="absolute top-3 left-3 z-10 w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold shadow-md">
+                        {rank}
+                      </div>
+                    )}
                     {post.thumbnailIsVideo && post.firstVideoUrl ? (
                       <video
                         src={post.firstVideoUrl}
@@ -238,8 +281,8 @@ const HotSpotMoreScreen = () => {
                       <div className="absolute inset-0 bg-slate-200 dark:bg-slate-700" />
                     )}
                     <div className="absolute inset-0 bg-black/20" />
-                    {/* 사진 왼쪽 위치 정보 가볍게 (구미 봉곡동 스타일) */}
-                    <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white/90 text-xs font-medium drop-shadow-sm whitespace-nowrap">
+                    {/* 사진 왼쪽 위치 정보 가볍게 (구미 봉곡동 스타일) — 랭크가 있으면 랭크 뱃지 아래로 */}
+                    <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white/90 text-xs font-medium drop-shadow-sm whitespace-nowrap" style={rank <= 3 ? { top: '60%' } : undefined}>
                       {locationShort}
                     </div>
                     <div className="absolute top-3 right-3 inline-flex items-center gap-1.5 bg-black/50 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium">
@@ -248,8 +291,11 @@ const HotSpotMoreScreen = () => {
                     </div>
                   </div>
 
-                  {/* 카드 본문: 제목, 북마크, 설명 */}
+                  {/* 카드 본문: 임팩트 라벨, 제목, 북마크, 설명 */}
                   <div className="p-4">
+                    {impactLabel && (
+                      <p className="text-xs text-primary font-medium mb-1">{impactLabel}</p>
+                    )}
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-lg font-bold text-text-main dark:text-white flex-1 min-w-0 truncate">
                         {title}

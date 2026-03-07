@@ -13,6 +13,7 @@ import { toggleInterestPlace, isInterestPlace } from '../utils/interestPlaces';
 import { getEarnedBadgesForUser } from '../utils/badgeSystem';
 import { getTrustScore, getTrustGrade } from '../utils/trustIndex';
 import { follow, unfollow, isFollowing } from '../utils/followSystem';
+import { recordConversion, CONVERSION_TYPES } from '../utils/conversionEvents';
 import { logger } from '../utils/logger';
 import 'swiper/css';
 
@@ -1370,7 +1371,10 @@ const PostDetailScreen = () => {
                 </div>
                 {fromMap && allPins && mapState && (
                   <button
-                    onClick={() => navigate('/map', { state: { mapState, selectedPinId } })}
+                    onClick={() => {
+                      if (post?.id) recordConversion(post.id, CONVERSION_TYPES.MAP);
+                      navigate('/map', { state: { mapState, selectedPinId } });
+                    }}
                     className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm font-semibold"
                   >
                     <span className="material-symbols-outlined text-lg">map</span>
