@@ -148,7 +148,16 @@ const CrowdedPlaceScreen = () => {
                     <h2 className="text-2xl font-bold leading-tight text-text-main dark:text-white">
                         실시간 급상승 핫플 🔥
                     </h2>
-                    <p className="text-text-sub dark:text-slate-400 text-sm mt-1">지금 가장 핫한 장소를 확인해보세요</p>
+                    <div className="flex items-center justify-between gap-3 mt-1">
+                        <p className="text-text-sub dark:text-slate-400 text-sm">지금 가장 핫한 장소를 확인해보세요</p>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/crowded-place/more')}
+                            className="flex-shrink-0 text-sm font-semibold text-primary hover:underline"
+                        >
+                            더보기
+                        </button>
+                    </div>
                 </section>
 
                 {/* 필터 — 전체(선택 시 진한 배경), 카페/맛집/명소 + 아이콘 */}

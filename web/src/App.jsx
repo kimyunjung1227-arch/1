@@ -50,6 +50,7 @@ const NotificationsScreen = lazy(() => import('./pages/NotificationsScreen'))
 const InterestPlacesScreen = lazy(() => import('./pages/InterestPlacesScreen'))
 const RealtimeFeedScreen = lazy(() => import('./pages/RealtimeFeedScreen'))
 const CrowdedPlaceScreen = lazy(() => import('./pages/CrowdedPlaceScreen'))
+const HotSpotMoreScreen = lazy(() => import('./pages/HotSpotMoreScreen'))
 const ChatScreen = lazy(() => import('./pages/ChatScreen'))
 const ChatWriteScreen = lazy(() => import('./pages/ChatWriteScreen'))
 const AdminScreen = lazy(() => import('./pages/AdminScreen'))
@@ -94,6 +95,7 @@ function App() {
                 <Route path="/magazine/:id" element={<MagazineDetailScreen />} />
                 <Route path="/realtime-feed" element={<RealtimeFeedScreen />} />
                 <Route path="/crowded-place" element={<CrowdedPlaceScreen />} />
+                <Route path="/crowded-place/more" element={<HotSpotMoreScreen />} />
                 <Route path="/chat" element={<ChatScreen />} />
                 <Route path="/chat/write" element={<ChatWriteScreen />} />
                 <Route path="/search" element={<SearchScreen />} />
