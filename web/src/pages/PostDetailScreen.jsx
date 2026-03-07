@@ -1277,17 +1277,19 @@ const PostDetailScreen = () => {
 
         <main className="flex flex-col bg-white dark:bg-gray-900" style={{ minHeight: 'auto' }}>
           <div className="px-4 pt-4 pb-3">
-            {/* 📍 위치 정보 */}
+            {/* 📍 위치 정보 (왼쪽 고정) + 게시물 수정 버튼 (우측 가볍게) */}
             <div className="flex items-start gap-3 mb-4">
-              <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-2xl flex-shrink-0">location_on</span>
-              <div className="flex-1">
-                <div className="flex items-center flex-wrap gap-2 mb-2">
-                  {isPostAuthor && !isEditingPost && (
-                    <button type="button" onClick={handleStartEditPost} className="ml-auto text-xs font-semibold text-primary hover:underline">게시물 수정</button>
-                  )}
-                  <p className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+              <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-2xl flex-shrink-0" aria-hidden="true">location_on</span>
+              <div className="flex-1 min-w-0 flex flex-col">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">
                     {verifiedLocation || detailedLocationText || locationText}
                   </p>
+                  {isPostAuthor && !isEditingPost && (
+                    <button type="button" onClick={handleStartEditPost} className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">수정</button>
+                  )}
+                </div>
+                <div className="flex items-center flex-wrap gap-2 mb-2">
                   {categoryName && (
                     <span
                       title={categoryName}
@@ -1509,14 +1511,19 @@ const PostDetailScreen = () => {
           <div id="comment-section" className="flex flex-col gap-3 px-4 py-3 bg-white dark:bg-gray-900">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold text-[#181410] dark:text-white">
-                  댓글 & 질문 {comments.length > 0 && `(${comments.length})`}
+                  댓글 & 질문 {(() => {
+                    const withContent = comments.filter((c) => (c.content ?? c.text ?? '').trim() !== '');
+                    return withContent.length > 0 ? `(${withContent.length})` : '';
+                  })()}
                 </h2>
               </div>
 
-              {/* 댓글 목록 */}
-              {comments.length > 0 && (
+              {/* 댓글 목록 (내용 있는 댓글만 표시 — 빈 유저 항목 제외) */}
+              {(() => {
+                const commentsWithContent = comments.filter((c) => (c.content ?? c.text ?? '').trim() !== '');
+                return commentsWithContent.length > 0 && (
                 <div className="flex flex-col gap-3 mt-2">
-                  {comments.map((comment) => {
+                  {commentsWithContent.map((comment) => {
                     const commentAuthorId = comment.userId || (comment.user && typeof comment.user === 'object' ? comment.user.id : null);
                     const canEditComment = user && (String(commentAuthorId) === String(user.id));
                     const isEditing = editingCommentId === comment.id;
@@ -1571,7 +1578,8 @@ const PostDetailScreen = () => {
                     );
                   })}
                 </div>
-              )}
+                );
+              })()}
 
               {/* 댓글 입력 */}
               <div className="flex gap-2 items-center mt-4">
