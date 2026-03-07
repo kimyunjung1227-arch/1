@@ -17,6 +17,10 @@ ALTER TABLE public.posts DROP CONSTRAINT IF EXISTS posts_user_id_fkey;
 -- 댓글 저장용 컬럼 (없으면 추가)
 ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'::jsonb;
 
+-- 작성자 표시명·프로필 이미지 (게시물 상세에서 '익명 여행자' 대신 실제 이름 표시)
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS author_username TEXT;
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS author_avatar_url TEXT;
+
 -- --------------------------------------------------------------
 -- 2) posts RLS — 기존 정책 제거 후 재생성
 -- --------------------------------------------------------------

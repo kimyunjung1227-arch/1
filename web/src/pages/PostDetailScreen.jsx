@@ -826,10 +826,14 @@ const PostDetailScreen = () => {
     if (post.user && typeof post.user === 'object') return post.user;
     return null;
   }, [post, user]);
-  const userName = useMemo(
-    () => authorDisplay?.username || (typeof post?.user === 'string' ? post.user : null) || '익명 여행자',
-    [authorDisplay, post]
-  );
+  const userName = useMemo(() => {
+    const fromAuthor = authorDisplay?.username || (typeof post?.user === 'string' ? post.user : null);
+    if (fromAuthor) return fromAuthor;
+    // 작성자 객체는 있는데 이름만 비어 있으면 이메일·기본값 사용 (Supabase에 author_username 미저장 이력 보정)
+    if (authorDisplay?.email) return authorDisplay.email.split('@')[0] || '여행자';
+    if (post?.user && typeof post.user === 'object' && post.user?.email) return post.user.email.split('@')[0] || '여행자';
+    return '익명 여행자';
+  }, [authorDisplay, post]);
   const userBadge = useMemo(() => post?.user?.badges?.[0] || post?.badge || null, [post]);
   const authorAvatar = useMemo(
     () => authorDisplay?.profileImage || post?.userAvatar || null,

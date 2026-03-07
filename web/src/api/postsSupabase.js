@@ -16,8 +16,12 @@ export const createPostSupabase = async (post) => {
     if (!post) return { success: false, error: 'no_post' };
 
     const userId = post.userId ?? (post.user && typeof post.user === 'object' ? post.user.id : null);
+    const authorName = post.user && typeof post.user === 'object' ? (post.user.username || null) : null;
+    const authorAvatar = post.user && typeof post.user === 'object' ? (post.user.profileImage || null) : null;
     const payload = {
       user_id: isValidUuid(userId) ? userId : null,
+      author_username: authorName || null,
+      author_avatar_url: authorAvatar || null,
       content: post.note || post.content || '',
       images: onlyPersistentUrls(post.images),
       videos: onlyPersistentUrls(post.videos),
