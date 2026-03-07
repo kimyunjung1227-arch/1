@@ -5,8 +5,11 @@ import { getTimeAgo } from '../utils/timeUtils';
 import { getCombinedPosts } from '../utils/mockData';
 import { getDisplayImageUrl } from '../api/upload';
 import PostThumbnail from '../components/PostThumbnail';
+import { fetchPostsSupabase } from '../api/postsSupabase';
 
 const DEFAULT_HASHTAGS = ['바다', '힐링', '맛집', '자연', '꽃', '일출', '카페', '여행', '휴양', '등산', '야경', '축제', '해변', '산', '전통', '한옥', '감귤', '벚꽃', '단풍', '도시'];
+const MAX_TAGS_SHOWN = 30;
+const INITIAL_TAGS_VISIBLE = 8;
 
 const HashtagScreen = () => {
   const navigate = useNavigate();
@@ -19,7 +22,7 @@ const HashtagScreen = () => {
 
   const scrollBodyRef = useRef(null);
 
-  // 사용자 업로드 + 목업 게시물에서 태그 수집, 빈도순
+  // 사용자 기반 추천: 게시물에서만 태그 수집, 빈도순, 적당히 제한 (상위 MAX_TAGS_SHOWN)
   const allHashtags = useMemo(() => {
     const norm = (s) => String(s || '').replace(/^#+/, '').trim().toLowerCase();
     const getDisplay = (t) => (typeof t === 'string' ? t : (t?.name || t?.label || '')).replace(/^#+/, '').trim();
@@ -39,9 +42,9 @@ const HashtagScreen = () => {
     const fromPosts = Array.from(map.entries())
       .map(([n, { display, count }]) => ({ key: n, display, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 120);
+      .slice(0, MAX_TAGS_SHOWN);
     if (fromPosts.length === 0) {
-      return DEFAULT_HASHTAGS.map((t) => ({ key: t.toLowerCase(), display: t, count: 0 }));
+      return DEFAULT_HASHTAGS.slice(0, INITIAL_TAGS_VISIBLE).map((t) => ({ key: t.toLowerCase(), display: t, count: 0 }));
     }
     return fromPosts;
   }, [allPosts]);
@@ -53,10 +56,10 @@ const HashtagScreen = () => {
     return allHashtags.filter((h) => h.key.includes(q) || (h.display || '').toLowerCase().includes(q));
   }, [allHashtags, tagSearchQuery]);
 
-  // 펼치기 전에는 상위 6개만, 펼치면 모두
+  // 펼치기 전에는 상위 8개만, 펼치면 전체(최대 MAX_TAGS_SHOWN)
   const visibleTags = useMemo(() => {
     if (tagsExpanded) return filteredBySearch;
-    return filteredBySearch.slice(0, 6);
+    return filteredBySearch.slice(0, INITIAL_TAGS_VISIBLE);
   }, [filteredBySearch, tagsExpanded]);
 
   // 선택된 태그의 게시물
@@ -75,8 +78,16 @@ const HashtagScreen = () => {
   }, [allPosts, selectedTag]);
 
   useEffect(() => {
-    const local = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
-    setAllPosts(getCombinedPosts(local));
+    const load = async () => {
+      const local = JSON.parse(localStorage.getItem('uploadedPosts') || '[]');
+      const supabase = await fetchPostsSupabase();
+      const byId = new Map();
+      [...(Array.isArray(supabase) ? supabase : []), ...(Array.isArray(local) ? local : [])].forEach((p) => {
+        if (p && p.id && !byId.has(p.id)) byId.set(p.id, p);
+      });
+      setAllPosts(getCombinedPosts(Array.from(byId.values())));
+    };
+    load();
   }, []);
 
   // URL ?tag=바다 → 초기 선택
@@ -161,7 +172,7 @@ const HashtagScreen = () => {
             </div>
 
             {/* 펼치기 / 접기 버튼 */}
-            {filteredBySearch.length > 6 && showExpandButton && (
+            {filteredBySearch.length > INITIAL_TAGS_VISIBLE && showExpandButton && (
               <div className="mt-3">
                 <button
                   type="button"

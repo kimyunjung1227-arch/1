@@ -67,6 +67,7 @@ const SearchScreen = () => {
   const [photoFocusMode, setPhotoFocusMode] = useState(false);
   const [weatherData, setWeatherData] = useState({});
   const [showInterestPlacesModal, setShowInterestPlacesModal] = useState(false);
+  const [cycleIndex, setCycleIndex] = useState(0);
 
   const recommendedScrollRef = useRef(null);
   const screenBodyRef = useRef(null);
@@ -147,81 +148,53 @@ const SearchScreen = () => {
     { id: 68, name: '서귀포', image: getRegionDefaultImage('서귀포'), keywords: ['바다', '섬', '폭포', '정방폭포', '천지연', '감귤', '자연'] }
   ], []);
 
-  // 추천 카드: 사용자가 올린 정보만 사용, 다양한 카테고리별 짧은 설명
+  // 게시물 위치에서 지역 키 추출 (대전 대덕구 → 대전, 경상북도 포항 → 포항)
+  const getRegionKeyFromLocation = useCallback((loc) => {
+    const s = String(loc || '').trim();
+    if (!s) return '';
+    const parts = s.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '';
+    if (parts[0].endsWith('도')) return parts.length >= 2 ? parts[1] : parts[0];
+    return parts[0];
+  }, []);
+
+  // 추천 지역 카드: 피드 게시물 위치별로 묶어서 하나의 지역으로 (대전→대전, 부산→부산), 사진은 사용자 업로드로 순환
   const diverseRegionCards = useMemo(() => {
-    const cat = (s) => String(s || '').toLowerCase();
-    const str = (arr) => (Array.isArray(arr) ? arr : []).map((x) => (typeof x === 'string' ? x : (x?.name || x?.label || ''))).join(' ');
     const groups = new Map();
     for (const post of allPosts) {
-      const loc = post.location || post.placeName || '';
-      const r = recommendedRegions.find((re) => loc.includes(re.name) || re.name.includes(loc));
-      if (!r) continue;
-      const c = cat(post.categoryName || '');
-      const t = cat(str(post.tags) + ' ' + str(post.aiLabels));
-      let type = '명소';
-      // 더 다양한 카테고리 분류
-      if (/꽃|개화|bloom|flower|벚꽃|매화|벚꽃|개화/.test(c + t)) type = '개화';
-      else if (/맛집|음식|food|밥|음식점|맛|식당|레스토랑|restaurant/.test(c + t)) type = '맛집';
-      else if (/카페|coffee|cafe|커피|브런치/.test(c + t)) type = '카페';
-      else if (/바다|해변|beach|sea|해수욕장|서핑/.test(c + t)) type = '해변';
-      else if (/산|등산|mountain|hiking|트레킹/.test(c + t)) type = '등산';
-      else if (/야경|night|밤|nightview|야경명소/.test(c + t)) type = '야경';
-      else if (/일출|일몰|sunrise|sunset|해돋이|해질녘/.test(c + t)) type = '일출일몰';
-      else if (/축제|festival|이벤트|행사/.test(c + t)) type = '축제';
-      else if (/전통|한옥|문화|역사|heritage|traditional/.test(c + t)) type = '문화';
-      else if (/액티비티|activity|체험|adventure/.test(c + t)) type = '액티비티';
-      const key = `${r.name}|${type}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(post);
+      const loc = post.location || post.placeName || post.region || '';
+      const regionKey = getRegionKeyFromLocation(loc);
+      if (!regionKey || regionKey.length < 2) continue;
+      if (!groups.has(regionKey)) groups.set(regionKey, []);
+      groups.get(regionKey).push(post);
     }
     const cards = [];
-    const order = { 개화: 0, 맛집: 1, 카페: 2, 해변: 3, 등산: 4, 야경: 5, 일출일몰: 6, 축제: 7, 문화: 8, 액티비티: 9, 명소: 10 };
-    const labels = { 
-      개화: '개화정보', 
-      맛집: '맛집정보', 
-      카페: '카페정보',
-      해변: '해변정보',
-      등산: '등산정보',
-      야경: '야경정보',
-      일출일몰: '일출일몰',
-      축제: '축제정보',
-      문화: '문화정보',
-      액티비티: '액티비티',
-      명소: '명소' 
-    };
-    const bloomPcts = [70, 75, 80, 85, 90, 95];
-    for (const [key, posts] of groups) {
-      const [name, type] = key.split('|');
+    for (const [name, posts] of groups) {
       const sorted = [...posts].sort((a, b) => (new Date(b.timestamp || b.createdAt || 0) - new Date(a.timestamp || a.createdAt || 0)));
-      const p = sorted[0];
-      let shortDesc = '';
-      if (type === '개화') shortDesc = `개화상태 ${bloomPcts[(name.length + posts.length) % bloomPcts.length]}% 이상`;
-      else if (type === '맛집') shortDesc = '웨이팅 필수 맛집';
-      else if (type === '카페') shortDesc = '인기 카페';
-      else if (type === '해변') shortDesc = '아름다운 해변';
-      else if (type === '등산') shortDesc = '추천 등산로';
-      else if (type === '야경') shortDesc = '아름다운 야경';
-      else if (type === '일출일몰') shortDesc = '일출/일몰 명소';
-      else if (type === '축제') shortDesc = '진행 중인 축제';
-      else if (type === '문화') shortDesc = '문화유산 탐방';
-      else if (type === '액티비티') shortDesc = '즐길 거리';
-      else shortDesc = `${name}의 필수 여행지`;
+      const latest = sorted[0];
+      const imgUrl = latest?.images?.[0] || latest?.thumbnail || latest?.image;
       cards.push({
         name,
-        category: type,
-        categoryLabel: labels[type] || '명소',
-        image: p.images?.[0] || p.thumbnail || p.image,
-        shortDesc,
-        detailedLocation: p.detailedLocation || p.placeName || shortDesc,
-        time: getTimeAgo(p.timestamp || p.createdAt),
+        category: '명소',
+        categoryLabel: '명소',
+        image: imgUrl,
+        shortDesc: `${name} 지역 게시물`,
+        detailedLocation: latest?.location || name,
+        time: getTimeAgo(latest?.timestamp || latest?.createdAt),
         count: posts.length,
-        hasUploadedPhoto: true
+        hasUploadedPhoto: true,
+        posts: sorted
       });
     }
-    cards.sort((a, b) => (order[a.category] ?? 10) - (order[b.category] ?? 10) || b.count - a.count);
-    // 추천 지역 카드는 화면 가독성을 위해 8개까지만 노출
-    return cards.slice(0, 8);
-  }, [allPosts, recommendedRegions]);
+    cards.sort((a, b) => b.count - a.count || (b.time || '').localeCompare(a.time || ''));
+    return cards.slice(0, 12);
+  }, [allPosts, getRegionKeyFromLocation]);
+
+  // 추천 지역 카드 사진 순환 (사용자 올린 사진이 주기적으로 바뀌도록)
+  useEffect(() => {
+    const t = setInterval(() => setCycleIndex((i) => i + 1), 5000);
+    return () => clearInterval(t);
+  }, []);
 
   // 지역별 날씨 정보 가져오기
   useEffect(() => {
@@ -802,7 +775,13 @@ const SearchScreen = () => {
                 </div>
               ) : diverseRegionCards.length === 0 ? null : (
                 diverseRegionCards.map((card, index) => {
-                  const displayImage = getDisplayImageUrl(card.image || getRegionDefaultImage(card.name));
+                  const posts = card.posts || [];
+                  const cyclePost = posts.length > 0 ? posts[(cycleIndex + index) % posts.length] : null;
+                  const rawImg = cyclePost
+                    ? (cyclePost.images && cyclePost.images[0]) || cyclePost.image || cyclePost.thumbnail
+                    : card.image;
+                  const imgSrc = getDisplayImageUrl(rawImg || '');
+                  const displayImage = (imgSrc && !String(imgSrc).match(/\.(mp4|webm|mov)(\?|$)/i)) ? imgSrc : getRegionDefaultImage(card.name);
                   const weather = weatherData[card.name];
                   return (
                     <div

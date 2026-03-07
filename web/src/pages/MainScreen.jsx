@@ -1095,10 +1095,6 @@ const MainScreen = () => {
                                             ) : (
                                                 <div style={{ width: '100%', height: '100%', background: '#e5e7eb' }} />
                                             )}
-                                            <div style={{ position: 'absolute', bottom: '8px', left: '8px', background: 'rgba(0,0,0,0.4)', color: '#fff', fontSize: '11px', padding: '4px 8px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '85%' }}>
-                                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>location_on</span>
-                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.location || '장소'}</span>
-                                            </div>
                                             <div style={{ position: 'absolute', bottom: '8px', right: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', background: 'rgba(15,23,42,0.6)', color: '#fff', padding: '3px 6px', borderRadius: '9999px', fontSize: '10px', fontWeight: 600 }}>
                                                     <span className="material-symbols-outlined" style={{ fontSize: '12px', fontVariationSettings: "'FILL' 1" }}>favorite</span>

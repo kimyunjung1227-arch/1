@@ -207,10 +207,6 @@ const CrowdedPlaceScreen = () => {
                                                 <span className="material-symbols-outlined text-4xl">image</span>
                                             </div>
                                         )}
-                                        <div className="absolute bottom-4 left-4 bg-black/40 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                            <span className="material-symbols-outlined text-sm">location_on</span>
-                                            <span className="truncate max-w-[200px]">{post.location || '장소'}</span>
-                                        </div>
                                         <div className="absolute bottom-3 right-3 flex items-center gap-2">
                                             <span className="inline-flex items-center gap-1.5 bg-black/45 text-white px-2.5 py-1 rounded-full text-xs font-semibold">
                                                 <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>favorite</span>
