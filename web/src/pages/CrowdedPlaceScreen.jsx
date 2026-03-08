@@ -290,33 +290,33 @@ const CrowdedPlaceScreen = () => {
                                                 <span className="material-symbols-outlined" style={isBookmarked ? { fontVariationSettings: "'FILL' 1" } : undefined}>bookmark</span>
                                             </button>
                                         </div>
-                                        <div className="mt-2 flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+                                        <div className="mt-2 flex flex-col gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                                             <div className="flex items-center gap-1.5">
                                                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
                                                 <span>현재 <strong className="text-text-main dark:text-slate-300">{viewingCount}명</strong>이 이 사진을 보고 있어요</span>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex -space-x-2">
-                                                    {avatars.length > 0 ? (
-                                                        avatars.map((url, i) => (
-                                                            <div key={i} className="w-6 h-6 rounded-full border-2 border-white dark:border-slate-800 bg-slate-200 bg-cover bg-center flex-shrink-0" style={{ backgroundImage: `url(${url})` }} />
-                                                        ))
-                                                    ) : (
-                                                        [0, 1, 2].map((i) => (
-                                                            <div key={i} className="w-6 h-6 rounded-full border-2 border-white dark:border-slate-800 bg-primary/20 flex items-center justify-center text-primary text-[9px] font-bold flex-shrink-0">
-                                                                {String(post.location || '?').charAt(0)}
-                                                            </div>
-                                                        ))
-                                                    )}
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <div className="flex -space-x-2">
+                                                        {avatars.length > 0 ? (
+                                                            avatars.map((url, i) => (
+                                                                <div key={i} className="w-6 h-6 rounded-full border-2 border-white dark:border-slate-800 bg-slate-200 bg-cover bg-center flex-shrink-0" style={{ backgroundImage: `url(${url})` }} />
+                                                            ))
+                                                        ) : (
+                                                            [0, 1, 2].map((i) => (
+                                                                <div key={i} className="w-6 h-6 rounded-full border-2 border-white dark:border-slate-800 bg-primary/20 flex items-center justify-center text-primary text-[9px] font-bold flex-shrink-0">
+                                                                    {String(post.location || '?').charAt(0)}
+                                                                </div>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                    <span className="text-text-sub dark:text-slate-400 truncate">지금 {uploadCount}명이 사진을 올렸어요</span>
                                                 </div>
-                                                <span className="text-text-sub dark:text-slate-400">지금 {uploadCount}명이 사진을 올렸어요</span>
+                                                <button type="button" className="flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-primary transition-colors flex-shrink-0" onClick={(e) => handleLike(e, post)} aria-label="좋아요">
+                                                    <span className="material-symbols-outlined text-base" style={isPostLiked(post.id) ? { fontVariationSettings: "'FILL' 1" } : undefined}>favorite</span>
+                                                    <span className="text-sm font-semibold">{likeCount}</span>
+                                                </button>
                                             </div>
-                                        </div>
-                                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-end">
-                                            <button type="button" className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-primary transition-colors" onClick={(e) => handleLike(e, post)} aria-label="좋아요">
-                                                <span className="material-symbols-outlined text-lg" style={isPostLiked(post.id) ? { fontVariationSettings: "'FILL' 1" } : undefined}>favorite</span>
-                                                <span className="text-sm font-semibold">{likeCount}</span>
-                                            </button>
                                         </div>
                                     </div>
                                 </div>
